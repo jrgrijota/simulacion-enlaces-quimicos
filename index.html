@@ -31,23 +31,28 @@
                 </div>
             </div>
 
-            <div id="ui-overlay"></div>
-
-            <div class="card">
-                <button class="card-trigger">¿Cómo funciona? <span class="card-chevron">▼</span></button>
-                <div class="card-body">
-                    <div class="info-section">
-                        <p>Selecciona un <b>metal</b> y un <b>no-metal</b>. Pulsa <em>Ceder e⁻</em> para que el metal transfiera electrones de valencia al no-metal.</p>
-                        <p>Cuando ambos iones alcanzan la <b>configuración de gas noble</b> (octeto o dueto) y tienen cargas opuestas, la atracción electrostática de <b>Coulomb</b> forma el enlace iónico.</p>
-                        <p>Usa las tres ranuras para compuestos como <b>MgCl₂</b> o <b>Na₂O</b>.</p>
-                    </div>
+            <div class="card" style="padding: 10px 12px 11px;">
+                <div class="info-section">
+                    <p><b>1.</b> Elige un <em>metal</em> y un <em>no metal</em> en las ranuras A / B / C.</p>
+                    <p><b>2.</b> Pulsa <em>Ceder e⁻</em> para transferir electrones de valencia.</p>
+                    <p><b>3.</b> Cuando los iones tienen cargas opuestas y configuración de gas noble (<b>octeto</b> o <b>dueto</b>), la atracción de <b>Coulomb</b> forma el enlace.</p>
+                    <p>Prueba con <b>MgCl₂</b>, <b>Na₂O</b> o <b>KF</b> usando las tres ranuras.</p>
                 </div>
             </div>
+
+            <div id="ui-overlay"></div>
 
         </div>
     </aside>
 
-    <div id="canvas-holder"></div>
+    <div id="canvas-holder">
+        <div id="sim-frame"></div>
+        <div id="atom-controls-row">
+            <div id="ctrl-0" class="atom-ctrl"></div>
+            <div id="ctrl-1" class="atom-ctrl"></div>
+            <div id="ctrl-2" class="atom-ctrl"></div>
+        </div>
+    </div>
 
     <script src="js/sketch.js"></script>
     <script>
