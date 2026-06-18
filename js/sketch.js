@@ -1,45 +1,64 @@
-// Diccionario Químico
+// ============================================================
+// DATOS QUÍMICOS
+// ============================================================
+const SHELL_RADII = [36, 60, 84, 108];
+const BOND_COLOR  = '#F59E0B';
+
 const ELEMENTS = {
-    H:  { Z: 1,  config: [1],       maxV: 2, color: '#38BDF8', isNM: true },
-    O:  { Z: 8,  config: [2, 6],    maxV: 8, color: '#A78BFA', isNM: true },
-    F:  { Z: 9,  config: [2, 7],    maxV: 8, color: '#FBBF24', isNM: true },
-    Na: { Z: 11, config: [2, 8, 1], maxV: 8, color: '#F43F5E', isNM: false },
-    Mg: { Z: 12, config: [2, 8, 2], maxV: 8, color: '#34D399', isNM: false },
-    Cl: { Z: 17, config: [2, 8, 7], maxV: 8, color: '#F472B6', isNM: true },
-    NONE:{ Z: 0, config: [],        maxV: 0, color: '#000000', isNM: false }
+    H:    { Z: 1,  config: [1],         nobleTarget: 2, isMetal: false, color: '#38BDF8', name: 'Hidrógeno' },
+    Li:   { Z: 3,  config: [2, 1],      nobleTarget: 8, isMetal: true,  color: '#A78BFA', name: 'Litio'     },
+    O:    { Z: 8,  config: [2, 6],      nobleTarget: 8, isMetal: false, color: '#FB923C', name: 'Oxígeno'   },
+    F:    { Z: 9,  config: [2, 7],      nobleTarget: 8, isMetal: false, color: '#FBBF24', name: 'Flúor'     },
+    Na:   { Z: 11, config: [2, 8, 1],   nobleTarget: 8, isMetal: true,  color: '#F43F5E', name: 'Sodio'     },
+    Mg:   { Z: 12, config: [2, 8, 2],   nobleTarget: 8, isMetal: true,  color: '#34D399', name: 'Magnesio'  },
+    S:    { Z: 16, config: [2, 8, 6],   nobleTarget: 8, isMetal: false, color: '#A3E635', name: 'Azufre'    },
+    Cl:   { Z: 17, config: [2, 8, 7],   nobleTarget: 8, isMetal: false, color: '#F472B6', name: 'Cloro'     },
+    NONE: { Z: 0,  config: [],          nobleTarget: 0, isMetal: false, color: '#475569', name: '—'         }
 };
 
-let currentMode = 'IONIC';
-let atoms = [];
-let metallicSim = null;
+// ============================================================
+// ESTADO GLOBAL
+// ============================================================
+let currentMode   = 'IONIC';
+let atoms         = [];
 let uiContainer;
+let bondFormed    = false;
+let bondProgress  = 0;
+let origPositions = [];
 
+// ============================================================
+// p5.js LIFECYCLE
+// ============================================================
 function setup() {
-    let canvas = createCanvas(windowWidth, windowHeight - 60);
-    canvas.parent('simulation-container');
+    let cont = document.getElementById('simulation-container');
+    let cnv  = createCanvas(cont.offsetWidth, cont.offsetHeight);
+    cnv.parent('simulation-container');
     uiContainer = select('#ui-overlay');
-    
     select('#mode-select').changed(handleModeChange);
     initSimulation();
 }
 
 function draw() {
     background('#0F172A');
-    
-    if (currentMode === 'METALLIC') {
-        if(metallicSim) metallicSim.updateAndDraw();
-    } else {
+    if (currentMode === 'IONIC') {
+        updateBondAnim();
         drawForces();
-        for (let atom of atoms) {
-            atom.update();
-            atom.draw();
-        }
+        for (let a of atoms) { a.update(); a.draw(); }
+        drawAtomLabels();
+        if (bondFormed) drawBondEffect();
+    } else {
+        noStroke();
+        fill('#334155');
+        textAlign(CENTER, CENTER);
+        textSize(18);
+        text('Próximamente...', width / 2, height / 2);
     }
 }
 
 function windowResized() {
-    resizeCanvas(windowWidth, windowHeight - 60);
-    initSimulation(); // Recalcula posiciones
+    let cont = document.getElementById('simulation-container');
+    resizeCanvas(cont.offsetWidth, cont.offsetHeight);
+    initSimulation();
 }
 
 function handleModeChange() {
@@ -47,118 +66,115 @@ function handleModeChange() {
     initSimulation();
 }
 
+// ============================================================
+// INICIALIZACIÓN
+// ============================================================
 function initSimulation() {
-    uiContainer.html(''); // Limpieza del DOM
-    atoms = [];
-    metallicSim = null;
+    uiContainer.html('');
+    atoms        = [];
+    bondFormed   = false;
+    bondProgress = 0;
 
-    let w = width;
-    let h = height / 2;
-
-    if (currentMode === 'IONIC' || currentMode === 'COVALENT') {
-        // Posiciones: 25%, 50%, 75%
-        atoms.push(new Atom(w * 0.25, h, 0));
-        atoms.push(new Atom(w * 0.50, h, 1));
-        atoms.push(new Atom(w * 0.75, h, 2));
-        
-        // Defaults
-        if(currentMode === 'IONIC') {
-            atoms[0].setElement('Na');
-            atoms[1].setElement('Cl');
-            atoms[2].setElement('NONE');
-        } else {
-            atoms[0].setElement('H');
-            atoms[1].setElement('O');
-            atoms[2].setElement('H');
+    if (currentMode === 'IONIC') {
+        let cx = width / 2, cy = constrain(height * 0.40, 150, 340);
+        origPositions = [
+            createVector(cx - width * 0.26, cy),
+            createVector(cx,                cy),
+            createVector(cx + width * 0.26, cy)
+        ];
+        for (let i = 0; i < 3; i++) {
+            atoms.push(new Atom(origPositions[i].x, origPositions[i].y, i));
         }
-        buildMoleculeUI();
-    } else if (currentMode === 'METALLIC') {
-        metallicSim = new MetallicSimulation();
-        buildMetallicUI();
+        atoms[0].setElement('Na');
+        atoms[1].setElement('Cl');
+        atoms[2].setElement('NONE');
+        buildIonicUI();
     }
 }
 
-function buildMoleculeUI() {
+function resetAtomPositions() {
     for (let i = 0; i < atoms.length; i++) {
+        if (origPositions[i]) {
+            atoms[i].pos       = origPositions[i].copy();
+            atoms[i].targetPos = origPositions[i].copy();
+        }
+    }
+}
+
+// ============================================================
+// UI DOM
+// ============================================================
+function buildIonicUI() {
+    const labels = ['Átomo A', 'Átomo B', 'Átomo C'];
+    for (let i = 0; i < 3; i++) {
         let panel = createDiv().class('atom-panel');
-        
+        panel.child(createDiv(labels[i]).class('panel-label'));
+
+        // Selector de elemento
         let sel = createSelect();
-        for (let el in ELEMENTS) {
-            if (currentMode === 'COVALENT' && !ELEMENTS[el].isNM && el !== 'NONE') continue;
-            sel.option(el);
+        sel.option('NONE', '— Vacío —');
+        for (let sym in ELEMENTS) {
+            if (sym === 'NONE') continue;
+            sel.option(sym, `${sym}  ${ELEMENTS[sym].name}`);
         }
         sel.value(atoms[i].symbol);
         sel.changed(() => {
+            bondFormed   = false;
+            bondProgress = 0;
+            resetAtomPositions();
             atoms[i].setElement(sel.value());
             updateUIState();
         });
-        
-        let dataBox = createDiv().class('status-box').id(`data-${i}`);
-        
-        let btnBox = createDiv().class('btn-group');
-        if (currentMode === 'IONIC') {
-            if (i > 0) {
-                let btnL = createButton('Transferir &larr;');
-                btnL.mousePressed(() => transferElectron(i, i-1));
-                btnBox.child(btnL);
-            }
-            if (i < 2) {
-                let btnR = createButton('Transferir &rarr;');
-                btnR.mousePressed(() => transferElectron(i, i+1));
-                btnBox.child(btnR);
-            }
-        } else {
-            if (i > 0) {
-                let btnL = createButton('Compartir &larr;');
-                btnL.mousePressed(() => shareElectron(i, i - 1));
-                btnBox.child(btnL);
-            }
-            if (i < 2) {
-                let btnR = createButton('Compartir &rarr;');
-                btnR.mousePressed(() => shareElectron(i, i + 1));
-                btnBox.child(btnR);
-            }
-        }
-
         panel.child(sel);
-        panel.child(dataBox);
+
+        // Caja de estado
+        panel.child(createDiv().class('status-box').id(`data-${i}`));
+
+        // Botones de transferencia
+        let btnBox = createDiv().class('btn-group');
+        if (i === 0) {
+            let b = createButton('Ceder e⁻ →');
+            b.id('btn-0r');
+            b.mousePressed(() => transferElectron(0, 1));
+            btnBox.child(b);
+        } else if (i === 1) {
+            let bL = createButton('← Ceder e⁻');
+            bL.id('btn-1l');
+            bL.mousePressed(() => transferElectron(1, 0));
+            let bR = createButton('Ceder e⁻ →');
+            bR.id('btn-1r');
+            bR.mousePressed(() => transferElectron(1, 2));
+            btnBox.child(bL);
+            btnBox.child(bR);
+        } else {
+            let b = createButton('← Ceder e⁻');
+            b.id('btn-2l');
+            b.mousePressed(() => transferElectron(2, 1));
+            btnBox.child(b);
+        }
         panel.child(btnBox);
         uiContainer.child(panel);
     }
     updateUIState();
 }
 
-function buildMetallicUI() {
-    let panel = createDiv().class('metallic-controls');
-    panel.html('<h3>Voltaje Aplicado</h3>');
-    
-    let slider = createSlider(0, 10, 0, 0.1);
-    slider.id('voltage-slider');
-    
-    let data = createDiv('Intensidad: 0.0 mA').id('current-data').class('status-box').style('margin-top', '10px');
-    
-    panel.child(slider);
-    panel.child(data);
-    uiContainer.child(panel);
-}
-
-// ==========================================
-// ARQUITECTURA DE OBJETOS
-// ==========================================
-
+// ============================================================
+// CLASE ATOM
+// ============================================================
 class Atom {
     constructor(x, y, index) {
-        this.pos = createVector(x, y);
-        this.index = index;
-        this.symbol = 'NONE';
-        this.data = ELEMENTS['NONE'];
+        this.pos       = createVector(x, y);
+        this.targetPos = createVector(x, y);
+        this.index     = index;
+        this.symbol    = 'NONE';
+        this.data      = ELEMENTS['NONE'];
         this.electrons = [];
         this.netCharge = 0;
     }
 
     setElement(sym) {
         this.symbol = sym;
-        this.data = ELEMENTS[sym];
+        this.data   = ELEMENTS[sym];
         this.buildElectrons();
         this.calcCharge();
     }
@@ -166,267 +182,386 @@ class Atom {
     buildElectrons() {
         this.electrons = [];
         if (this.symbol === 'NONE') return;
-        
-        let shellRadii = [40, 70, 100];
         for (let n = 0; n < this.data.config.length; n++) {
-            let numE = this.data.config[n];
-            let radius = shellRadii[n];
+            let numE  = this.data.config[n];
+            let speed = max(0.008, 0.022 - n * 0.005);
             for (let e = 0; e < numE; e++) {
-                let angle = map(e, 0, numE, 0, TWO_PI);
                 this.electrons.push({
-                    shell: n,
-                    radius: radius,
-                    angle: angle,
-                    speed: 0.02 + (n * 0.005), // Velocidades diferenciales por capa
-                    color: this.data.color,
-                    isShared: false
+                    shell:     n,
+                    radius:    SHELL_RADII[n],
+                    angle:     map(e, 0, numE, 0, TWO_PI),
+                    speed:     speed,
+                    baseColor: this.data.color,
+                    color:     this.data.color
                 });
             }
         }
     }
 
     calcCharge() {
-        if (this.symbol === 'NONE') {
-            this.netCharge = 0;
-            return;
-        }
+        if (this.symbol === 'NONE') { this.netCharge = 0; return; }
         this.netCharge = this.data.Z - this.electrons.length;
     }
 
-    getValenceCount() {
-        if (this.electrons.length === 0) return 0;
-        let maxShell = Math.max(...this.electrons.map(e => e.shell));
-        return this.electrons.filter(e => e.shell === maxShell).length;
+    valenceShell() {
+        if (!this.electrons.length) return -1;
+        return Math.max(...this.electrons.map(e => e.shell));
+    }
+
+    valenceCount() {
+        let vs = this.valenceShell();
+        return vs < 0 ? 0 : this.electrons.filter(e => e.shell === vs).length;
+    }
+
+    isStable() {
+        if (this.symbol === 'NONE') return null;
+        return this.valenceCount() === this.data.nobleTarget;
     }
 
     update() {
+        this.pos.x = lerp(this.pos.x, this.targetPos.x, 0.05);
+        this.pos.y = lerp(this.pos.y, this.targetPos.y, 0.05);
         for (let e of this.electrons) {
             e.angle += e.speed;
+            if (bondFormed) {
+                let t   = min(bondProgress * 1.6, 1);
+                e.color = lerpColor(color(e.baseColor), color(BOND_COLOR), t);
+            } else {
+                e.color = e.baseColor;
+            }
         }
     }
 
     draw() {
         if (this.symbol === 'NONE') return;
+        let vs = this.valenceShell();
+        if (vs < 0) return;
 
         // Órbitas
-        stroke('#475569');
         noFill();
         strokeWeight(1);
-        let maxS = Math.max(...this.electrons.map(e => e.shell));
-        let shellRadii = [40, 70, 100];
-        for (let i = 0; i <= maxS; i++) {
-            drawingContext.setLineDash([5, 5]);
-            circle(this.pos.x, this.pos.y, shellRadii[i] * 2);
+        for (let s = 0; s <= vs; s++) {
+            stroke(71, 85, 105);
+            drawingContext.setLineDash([4, 5]);
+            ellipse(this.pos.x, this.pos.y, SHELL_RADII[s] * 2, SHELL_RADII[s] * 2);
         }
         drawingContext.setLineDash([]);
 
         // Núcleo
-        fill('#E2E8F0');
         noStroke();
-        circle(this.pos.x, this.pos.y, 30);
-        
+        fill(15, 23, 42, 200);
+        circle(this.pos.x, this.pos.y, 52);
+        fill('#E2E8F0');
+        circle(this.pos.x, this.pos.y, 44);
         fill('#0F172A');
         textAlign(CENTER, CENTER);
-        textSize(14);
+        textSize(13);
         textStyle(BOLD);
         text(this.symbol, this.pos.x, this.pos.y);
+        textStyle(NORMAL);
 
         // Electrones
         for (let e of this.electrons) {
-            let ex, ey;
-            if (e.isShared && e.sharedWith !== undefined && atoms[e.sharedWith]) {
-                let other = atoms[e.sharedWith];
-                let midX = (this.pos.x + other.pos.x) / 2;
-                let midY = (this.pos.y + other.pos.y) / 2;
-                ex = midX + cos(e.angle) * 15;
-                ey = midY + sin(e.angle) * 15;
-            } else {
-                ex = this.pos.x + cos(e.angle) * e.radius;
-                ey = this.pos.y + sin(e.angle) * e.radius;
-            }
-            fill(e.color);
-            circle(ex, ey, 8);
+            let ex = this.pos.x + cos(e.angle) * e.radius;
+            let ey = this.pos.y + sin(e.angle) * e.radius;
+            let c  = color(e.color);
+            noStroke();
+            fill(red(c), green(c), blue(c), 55);
+            circle(ex, ey, 18);
+            fill(c);
+            circle(ex, ey, 9);
         }
     }
 }
 
-class MetallicSimulation {
-    constructor() {
-        this.cations = [];
-        this.electrons = [];
-        
-        // Generar Retículo Cristalino
-        let cols = Math.floor(width / 120);
-        let rows = Math.floor(height / 120);
-        let offsetX = (width - (cols-1)*120) / 2;
-        let offsetY = (height - (rows-1)*120) / 2;
+// ============================================================
+// ETIQUETAS EN CANVAS (símbolo + carga bajo cada átomo)
+// ============================================================
+function drawAtomLabels() {
+    if (bondFormed && bondProgress > 0.85) return;
+    for (let a of atoms) {
+        if (a.symbol === 'NONE') continue;
+        let vs = a.valenceShell();
+        if (vs < 0) continue;
+        let baseY  = a.pos.y + SHELL_RADII[vs] + 16;
+        let q      = a.netCharge;
+        let qStr   = q === 0 ? '0' : (q > 0 ? `+${q}` : `${q}`);
+        let qColor = q < 0 ? color('#38BDF8') : (q > 0 ? color('#F87171') : color('#10B981'));
 
-        for (let i = 0; i < cols; i++) {
-            for (let j = 0; j < rows; j++) {
-                this.cations.push(createVector(offsetX + i*120, offsetY + j*120));
-            }
-        }
-
-        // Generar Gas de Electrones
-        for (let i = 0; i < 150; i++) {
-            this.electrons.push({
-                pos: createVector(random(width), random(height)),
-                vel: p5.Vector.random2D().mult(random(0.5, 2))
-            });
-        }
-    }
-
-    updateAndDraw() {
-        let voltage = select('#voltage-slider').value();
-        let drift = map(voltage, 0, 10, 0, 8);
-        
-        select('#current-data').html(`Intensidad: ${(voltage * 1.5).toFixed(1)} mA<br>Velocidad de Deriva: ${drift.toFixed(2)}`);
-
-        // Dibujar Cationes
-        fill('#3B82F6');
-        stroke('#60A5FA');
-        strokeWeight(2);
-        for (let c of this.cations) {
-            circle(c.x, c.y, 40);
-            fill('#fff'); noStroke();
-            textAlign(CENTER, CENTER); text('Cu⁺', c.x, c.y);
-            fill('#3B82F6'); stroke('#60A5FA');
-        }
-
-        // Actualizar y Dibujar Electrones (Mar de electrones)
-        fill('#10B981');
         noStroke();
-        for (let e of this.electrons) {
-            // Cinemática Browniana + Deriva
-            let noise = p5.Vector.random2D().mult(0.5);
-            e.vel.add(noise);
-            e.vel.limit(3); // Evitar explosión térmica
-            
-            let totalVel = p5.Vector.add(e.vel, createVector(drift, 0));
-            e.pos.add(totalVel);
-
-            // Condiciones de contorno periódicas (Toroide)
-            if (e.pos.x > width) e.pos.x = 0;
-            if (e.pos.x < 0) e.pos.x = width;
-            if (e.pos.y > height) e.pos.y = 0;
-            if (e.pos.y < 0) e.pos.y = height;
-
-            circle(e.pos.x, e.pos.y, 6);
-        }
+        textAlign(CENTER, CENTER);
+        textStyle(BOLD);
+        textSize(15);
+        fill('#CBD5E1');
+        text(a.symbol, a.pos.x, baseY);
+        textSize(13);
+        fill(qColor);
+        text(qStr, a.pos.x, baseY + 19);
+        textStyle(NORMAL);
     }
 }
 
-// ==========================================
-// FÍSICA LÓGICA Y ESTADOS
-// ==========================================
-
+// ============================================================
+// TRANSFERENCIA DE ELECTRONES
+// ============================================================
 function transferElectron(fromIdx, toIdx) {
-    let fromAtom = atoms[fromIdx];
-    let toAtom = atoms[toIdx];
-    
-    if (fromAtom.symbol === 'NONE' || toAtom.symbol === 'NONE') return;
-    
-    let maxShell = Math.max(...fromAtom.electrons.map(e => e.shell));
-    let valenceElectrons = fromAtom.electrons.filter(e => e.shell === maxShell);
-    
-    if (valenceElectrons.length > 0) {
-        // Encontrar índice real en el array principal
-        let eToMove = fromAtom.electrons.findIndex(e => e.shell === maxShell);
-        let el = fromAtom.electrons.splice(eToMove, 1)[0];
-        
-        // Recalcular capa destino (default 0 si el átomo no tiene electrones)
-        let toShell = toAtom.electrons.length > 0
-            ? Math.max(...toAtom.electrons.map(e => e.shell))
-            : 0;
-        let shellRadii = [40, 70, 100];
-        
-        el.shell = toShell;
-        el.radius = shellRadii[toShell];
-        toAtom.electrons.push(el);
-        
-        fromAtom.calcCharge();
-        toAtom.calcCharge();
-        updateUIState();
+    if (bondFormed) return;
+    let from = atoms[fromIdx];
+    let to   = atoms[toIdx];
+    if (from.symbol === 'NONE' || to.symbol === 'NONE') return;
+    if (from.electrons.length === 0) return;
+    if (to.isStable()) return;
+
+    let maxS = from.valenceShell();
+    if (maxS < 0) return;
+    let eIdx = from.electrons.findIndex(e => e.shell === maxS);
+    if (eIdx < 0) return;
+
+    let el      = from.electrons.splice(eIdx, 1)[0];
+    let toShell = to.electrons.length > 0 ? to.valenceShell() : 0;
+    el.shell    = toShell;
+    el.radius   = SHELL_RADII[toShell];
+    el.angle    = random(TWO_PI);
+    to.electrons.push(el);
+
+    from.calcCharge();
+    to.calcCharge();
+    updateUIState();
+    checkBondFormed();
+}
+
+// ============================================================
+// LÓGICA DE ENLACE
+// ============================================================
+function checkBondFormed() {
+    let active = atoms.filter(a => a.symbol !== 'NONE');
+    if (active.length < 2) return;
+    if (!active.every(a => a.isStable())) return;
+
+    for (let i = 0; i < atoms.length - 1; i++) {
+        let a1 = atoms[i], a2 = atoms[i + 1];
+        if (a1.symbol === 'NONE' || a2.symbol === 'NONE') continue;
+        if (a1.netCharge * a2.netCharge >= 0) return;
+    }
+
+    bondFormed = true;
+    let activeIdx = atoms.reduce((acc, a, i) => a.symbol !== 'NONE' ? [...acc, i] : acc, []);
+    let n         = activeIdx.length;
+    let spacing   = 140;
+    let cx        = width  / 2;
+    let cy        = constrain(height * 0.40, 150, 340);
+    for (let k = 0; k < n; k++) {
+        atoms[activeIdx[k]].targetPos = createVector(cx + (k - (n - 1) / 2) * spacing, cy);
     }
 }
 
-function shareElectron(fromIdx, toIdx) {
-    let fromAtom = atoms[fromIdx];
-    let toAtom = atoms[toIdx];
-
-    if (fromAtom.symbol === 'NONE' || toAtom.symbol === 'NONE') return;
-    if (fromAtom.electrons.length === 0) return;
-
-    let maxShell = Math.max(...fromAtom.electrons.map(e => e.shell));
-    let freeValence = fromAtom.electrons.find(e => e.shell === maxShell && !e.isShared);
-
-    if (freeValence) {
-        freeValence.isShared = true;
-        freeValence.sharedWith = toIdx;
-        updateUIState();
+function updateBondAnim() {
+    if (bondFormed && bondProgress < 1) {
+        bondProgress = min(bondProgress + 0.012, 1);
     }
 }
 
+// ============================================================
+// ACTUALIZACIÓN DEL ESTADO UI
+// ============================================================
 function updateUIState() {
-    for (let i = 0; i < atoms.length; i++) {
-        let a = atoms[i];
+    for (let i = 0; i < 3; i++) {
+        let a   = atoms[i];
         let box = select(`#data-${i}`);
         if (!box) continue;
 
         if (a.symbol === 'NONE') {
-            box.html('Vacío');
-            continue;
+            box.html('<div class="ui-empty">— ranura vacía —</div>');
+        } else {
+            let q      = a.netCharge;
+            let qStr   = q === 0 ? '0' : (q > 0 ? `+${q}` : `${q}`);
+            let qColor = q < 0 ? '#38BDF8' : q > 0 ? '#F87171' : '#10B981';
+            let vCount = a.valenceCount();
+            let target = a.data.nobleTarget;
+            let stable = a.isStable();
+            let diff   = target - vCount;
+
+            let diffHtml = '';
+            if (!stable) {
+                diffHtml = diff > 0
+                    ? `<div class="check-fail">Necesita ${diff} e⁻ más</div>`
+                    : `<div class="check-fail">Tiene ${Math.abs(diff)} e⁻ de más</div>`;
+            }
+
+            let checkHtml = stable
+                ? `<div class="check-pass">✔ Octeto / gas noble alcanzado</div>`
+                : `<div class="check-fail">✖ Configuración inestable</div>`;
+
+            box.html(`
+                <div>Carga neta: <b style="color:${qColor}">${qStr}</b></div>
+                <div>Valencia: ${vCount} / ${target}</div>
+                ${diffHtml}
+                <div style="margin-top:5px">${checkHtml}</div>
+            `);
         }
+    }
+    updateButtonStates();
+}
 
-        let qStr = a.netCharge > 0 ? `+${a.netCharge}` : (a.netCharge === 0 ? '0' : `${a.netCharge}`);
-        let vCount = a.getValenceCount();
-        let isStable = vCount === a.data.maxV || a.electrons.length === 0; // Kernel expuesto
+// ============================================================
+// ESTADO DE BOTONES
+// ============================================================
+function updateButtonStates() {
+    if (bondFormed) {
+        ['btn-0r', 'btn-1l', 'btn-1r', 'btn-2l'].forEach(id => {
+            let b = select(`#${id}`);
+            if (b) b.attribute('disabled', '');
+        });
+        return;
+    }
+    setBtn('btn-0r', canTransfer(0, 1));
+    setBtn('btn-1l', canTransfer(1, 0));
+    setBtn('btn-1r', canTransfer(1, 2));
+    setBtn('btn-2l', canTransfer(2, 1));
+}
 
-        let statusClass = isStable ? 'check-pass' : 'check-fail';
-        let statusIcon = isStable ? '✔ Estable' : '✖ Inestable';
+function canTransfer(fromIdx, toIdx) {
+    let from = atoms[fromIdx], to = atoms[toIdx];
+    if (!from || !to) return false;
+    if (from.symbol === 'NONE' || to.symbol === 'NONE') return false;
+    if (from.electrons.length === 0) return false;
+    if (to.isStable()) return false;
+    if (from.valenceShell() < 0) return false;
+    return true;
+}
 
-        box.html(`
-            Carga: <b>${qStr}</b><br>
-            Capa Valencia: ${vCount}/${a.data.maxV}<br>
-            <span class="${statusClass}">${statusIcon}</span>
-        `);
+function setBtn(id, enabled) {
+    let b = select(`#${id}`);
+    if (!b) return;
+    if (enabled) b.removeAttribute('disabled');
+    else         b.attribute('disabled', '');
+}
+
+// ============================================================
+// FUERZAS ELECTROSTÁTICAS EN CANVAS
+// ============================================================
+function drawForces() {
+    let atomCY = constrain(height * 0.40, 150, 340);
+    let lineY  = atomCY - SHELL_RADII[2] - 48;
+
+    for (let i = 0; i < atoms.length - 1; i++) {
+        let a1 = atoms[i], a2 = atoms[i + 1];
+        if (a1.symbol === 'NONE' || a2.symbol === 'NONE') continue;
+
+        let midX     = (a1.pos.x + a2.pos.x) / 2;
+        let attracts = a1.netCharge * a2.netCharge < 0;
+
+        if (attracts) {
+            stroke('#FBBF24');
+            strokeWeight(2);
+            drawingContext.setLineDash([8, 6]);
+            line(a1.pos.x, lineY, a2.pos.x, lineY);
+            drawingContext.setLineDash([]);
+            drawArrowHead(a2.pos.x, lineY, a1.pos.x, lineY, '#FBBF24');
+            drawArrowHead(a1.pos.x, lineY, a2.pos.x, lineY, '#FBBF24');
+            noStroke();
+            fill('#FBBF24');
+            textAlign(CENTER, BOTTOM);
+            textSize(11);
+            text('⚡ Atracción electrostática', midX, lineY - 4);
+            fill('#10B981');
+            textSize(15);
+            textAlign(CENTER, TOP);
+            text('✔', midX, lineY + 3);
+        } else {
+            noStroke();
+            fill('#64748B');
+            textAlign(CENTER, BOTTOM);
+            textSize(11);
+            text('Sin atracción electrostática', midX, lineY - 4);
+            fill('#EF4444');
+            textSize(15);
+            textAlign(CENTER, TOP);
+            text('✖', midX, lineY + 3);
+        }
     }
 }
 
-function drawForces() {
-    for (let i = 0; i < atoms.length - 1; i++) {
-        let a1 = atoms[i];
-        let a2 = atoms[i+1];
-        if (a1.symbol === 'NONE' || a2.symbol === 'NONE') continue;
+function drawArrowHead(x1, y1, x2, y2, col) {
+    let ang  = atan2(y2 - y1, x2 - x1);
+    let size = 9;
+    fill(col);
+    noStroke();
+    push();
+    translate(x2, y2);
+    rotate(ang);
+    triangle(-size, size / 2, -size, -size / 2, 0, 0);
+    pop();
+}
 
-        let midX = (a1.pos.x + a2.pos.x) / 2;
+// ============================================================
+// EFECTO VISUAL DEL ENLACE
+// ============================================================
+function drawBondEffect() {
+    let active = atoms.filter(a => a.symbol !== 'NONE');
+    if (active.length < 2) return;
 
-        if (currentMode === 'IONIC' && a1.netCharge * a2.netCharge < 0) {
-            stroke('#FBBF24');
-            strokeWeight(3);
-            drawingContext.setLineDash([10, 10]);
-            line(a1.pos.x, a1.pos.y, a2.pos.x, a2.pos.y);
-            drawingContext.setLineDash([]);
-            fill('#FBBF24'); noStroke();
-            textAlign(CENTER, BOTTOM);
-            textSize(12);
-            text("Fuerza Electrostática Activa", midX, a1.pos.y - 10);
-        }
+    let pad  = SHELL_RADII[2] + 24;
+    let minX = Math.min(...active.map(a => a.pos.x)) - pad;
+    let maxX = Math.max(...active.map(a => a.pos.x)) + pad;
+    let minY = Math.min(...active.map(a => a.pos.y)) - pad;
+    let maxY = Math.max(...active.map(a => a.pos.y)) + pad;
+    let alpha = map(bondProgress, 0, 1, 0, 255);
 
-        if (currentMode === 'COVALENT') {
-            let sharedCount = a1.electrons.filter(e => e.isShared && e.sharedWith === i + 1).length
-                            + a2.electrons.filter(e => e.isShared && e.sharedWith === i).length;
-            if (sharedCount > 0) {
-                stroke('#38BDF8');
-                strokeWeight(2);
-                drawingContext.setLineDash([6, 4]);
-                line(a1.pos.x, a1.pos.y, a2.pos.x, a2.pos.y);
-                drawingContext.setLineDash([]);
-                fill('#38BDF8'); noStroke();
-                textAlign(CENTER, BOTTOM);
-                textSize(12);
-                text(`Enlace Covalente (${sharedCount} par${sharedCount > 1 ? 'es' : ''})`, midX, a1.pos.y - 10);
-            }
-        }
+    // Fondo tenue
+    noStroke();
+    fill(16, 185, 129, alpha * 0.09);
+    rect(minX, minY, maxX - minX, maxY - minY, 20);
+
+    // Borde verde
+    noFill();
+    stroke(16, 185, 129, alpha);
+    strokeWeight(3);
+    rect(minX, minY, maxX - minX, maxY - minY, 20);
+
+    // Nombre del compuesto
+    if (bondProgress > 0.55) {
+        let a2 = map(bondProgress, 0.55, 0.9, 0, 255);
+        noStroke();
+        fill(255, 255, 255, a2);
+        textAlign(CENTER, TOP);
+        textSize(26);
+        textStyle(BOLD);
+        text(getCompoundName(), (minX + maxX) / 2, maxY + 12);
+        textStyle(NORMAL);
     }
+
+    // Banner inferior
+    if (bondProgress > 0.75) {
+        let a3 = map(bondProgress, 0.75, 1, 0, 255);
+        let bx = width / 2, by = height * 0.87;
+        noStroke();
+        fill(16, 185, 129, a3 * 0.18);
+        rect(bx - 180, by - 20, 360, 40, 10);
+        fill(16, 185, 129, a3);
+        textAlign(CENTER, CENTER);
+        textSize(17);
+        textStyle(BOLD);
+        text('¡Enlace iónico formado!', bx, by);
+        textStyle(NORMAL);
+    }
+}
+
+// ============================================================
+// NOMBRE DEL COMPUESTO
+// ============================================================
+function getCompoundName() {
+    let syms = atoms.filter(a => a.symbol !== 'NONE').map(a => a.symbol);
+    let counts = {};
+    syms.forEach(s => counts[s] = (counts[s] || 0) + 1);
+    let metals    = [...new Set(syms.filter(s => ELEMENTS[s].isMetal))];
+    let nonMetals = [...new Set(syms.filter(s => !ELEMENTS[s].isMetal))];
+    let result = '';
+    for (let m  of metals)    result += m  + (counts[m]  > 1 ? toSub(counts[m])  : '');
+    for (let nm of nonMetals) result += nm + (counts[nm] > 1 ? toSub(counts[nm]) : '');
+    return result || syms.join('');
+}
+
+function toSub(n) {
+    return String(n).replace(/\d/g, d => '₀₁₂₃₄₅₆₇₈₉'[d]);
 }
