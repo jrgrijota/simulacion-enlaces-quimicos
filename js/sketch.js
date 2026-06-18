@@ -108,13 +108,14 @@ function buildMoleculeUI() {
                 btnBox.child(btnR);
             }
         } else {
-             // Lógica Covalente simplificada para UI
-             if (i > 0) {
+            if (i > 0) {
                 let btnL = createButton('Compartir &larr;');
+                btnL.mousePressed(() => shareElectron(i, i - 1));
                 btnBox.child(btnL);
             }
             if (i < 2) {
                 let btnR = createButton('Compartir &rarr;');
+                btnR.mousePressed(() => shareElectron(i, i + 1));
                 btnBox.child(btnR);
             }
         }
@@ -232,8 +233,17 @@ class Atom {
 
         // Electrones
         for (let e of this.electrons) {
-            let ex = this.pos.x + cos(e.angle) * e.radius;
-            let ey = this.pos.y + sin(e.angle) * e.radius;
+            let ex, ey;
+            if (e.isShared && e.sharedWith !== undefined && atoms[e.sharedWith]) {
+                let other = atoms[e.sharedWith];
+                let midX = (this.pos.x + other.pos.x) / 2;
+                let midY = (this.pos.y + other.pos.y) / 2;
+                ex = midX + cos(e.angle) * 15;
+                ey = midY + sin(e.angle) * 15;
+            } else {
+                ex = this.pos.x + cos(e.angle) * e.radius;
+                ey = this.pos.y + sin(e.angle) * e.radius;
+            }
             fill(e.color);
             circle(ex, ey, 8);
         }
@@ -324,8 +334,10 @@ function transferElectron(fromIdx, toIdx) {
         let eToMove = fromAtom.electrons.findIndex(e => e.shell === maxShell);
         let el = fromAtom.electrons.splice(eToMove, 1)[0];
         
-        // Recalcular capa destino
-        let toShell = Math.max(...toAtom.electrons.map(e => e.shell));
+        // Recalcular capa destino (default 0 si el átomo no tiene electrones)
+        let toShell = toAtom.electrons.length > 0
+            ? Math.max(...toAtom.electrons.map(e => e.shell))
+            : 0;
         let shellRadii = [40, 70, 100];
         
         el.shell = toShell;
@@ -334,6 +346,23 @@ function transferElectron(fromIdx, toIdx) {
         
         fromAtom.calcCharge();
         toAtom.calcCharge();
+        updateUIState();
+    }
+}
+
+function shareElectron(fromIdx, toIdx) {
+    let fromAtom = atoms[fromIdx];
+    let toAtom = atoms[toIdx];
+
+    if (fromAtom.symbol === 'NONE' || toAtom.symbol === 'NONE') return;
+    if (fromAtom.electrons.length === 0) return;
+
+    let maxShell = Math.max(...fromAtom.electrons.map(e => e.shell));
+    let freeValence = fromAtom.electrons.find(e => e.shell === maxShell && !e.isShared);
+
+    if (freeValence) {
+        freeValence.isShared = true;
+        freeValence.sharedWith = toIdx;
         updateUIState();
     }
 }
@@ -370,20 +399,34 @@ function drawForces() {
         let a2 = atoms[i+1];
         if (a1.symbol === 'NONE' || a2.symbol === 'NONE') continue;
 
-        if (a1.netCharge * a2.netCharge < 0) {
-            // Atracción electrostática de Coulomb
+        let midX = (a1.pos.x + a2.pos.x) / 2;
+
+        if (currentMode === 'IONIC' && a1.netCharge * a2.netCharge < 0) {
             stroke('#FBBF24');
             strokeWeight(3);
             drawingContext.setLineDash([10, 10]);
             line(a1.pos.x, a1.pos.y, a2.pos.x, a2.pos.y);
             drawingContext.setLineDash([]);
-            
-            // Flecha indicadora
-            let midX = (a1.pos.x + a2.pos.x) / 2;
             fill('#FBBF24'); noStroke();
             textAlign(CENTER, BOTTOM);
             textSize(12);
             text("Fuerza Electrostática Activa", midX, a1.pos.y - 10);
+        }
+
+        if (currentMode === 'COVALENT') {
+            let sharedCount = a1.electrons.filter(e => e.isShared && e.sharedWith === i + 1).length
+                            + a2.electrons.filter(e => e.isShared && e.sharedWith === i).length;
+            if (sharedCount > 0) {
+                stroke('#38BDF8');
+                strokeWeight(2);
+                drawingContext.setLineDash([6, 4]);
+                line(a1.pos.x, a1.pos.y, a2.pos.x, a2.pos.y);
+                drawingContext.setLineDash([]);
+                fill('#38BDF8'); noStroke();
+                textAlign(CENTER, BOTTOM);
+                textSize(12);
+                text(`Enlace Covalente (${sharedCount} par${sharedCount > 1 ? 'es' : ''})`, midX, a1.pos.y - 10);
+            }
         }
     }
 }
