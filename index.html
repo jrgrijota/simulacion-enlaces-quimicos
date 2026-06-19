@@ -31,13 +31,12 @@
                 </div>
             </div>
 
-            <div class="card" style="padding: 10px 12px 11px;">
-                <div class="info-section">
-                    <p><b>1.</b> Elige un <em>metal</em> y un <em>no metal</em> en las ranuras A / B / C.</p>
-                    <p><b>2.</b> Pulsa <em>Ceder e⁻</em> para transferir electrones de valencia.</p>
-                    <p><b>3.</b> Cuando los iones tienen cargas opuestas y configuración de gas noble (<b>octeto</b> o <b>dueto</b>), la atracción de <b>Coulomb</b> forma el enlace.</p>
-                    <p>Prueba con <b>MgCl₂</b>, <b>Na₂O</b> o <b>KF</b> usando las tres ranuras.</p>
-                </div>
+            <div class="card" id="mode-info-card" style="padding: 10px 12px 11px;">
+                <div id="mode-info" class="info-section"></div>
+            </div>
+
+            <div style="padding: 0 2px;">
+                <button id="pause-btn" onclick="togglePause()" style="width:100%; font-size:12px; padding: 7px 10px;">⏸ Pausar</button>
             </div>
 
             <div id="ui-overlay"></div>
@@ -49,7 +48,9 @@
         <div id="sim-frame"></div>
         <div id="atom-controls-row">
             <div id="ctrl-0" class="atom-ctrl"></div>
+            <div id="bond-01" class="bond-connector" style="display:none"></div>
             <div id="ctrl-1" class="atom-ctrl"></div>
+            <div id="bond-12" class="bond-connector" style="display:none"></div>
             <div id="ctrl-2" class="atom-ctrl"></div>
         </div>
     </div>
