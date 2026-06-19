@@ -137,11 +137,32 @@ function updateModeInfo() {
     else el.innerHTML = '<p>Selecciona <em>Enlace Iónico</em> o <em>Enlace Covalente</em> para comenzar.</p>';
 }
 
+function togglePause() {
+    let btn = document.getElementById('pause-btn');
+    if (isLooping()) {
+        noLoop();
+        if (btn) { btn.textContent = '▶ Reanudar'; btn.classList.add('btn-primary'); }
+    } else {
+        loop();
+        if (btn) { btn.textContent = '⏸ Pausar'; btn.classList.remove('btn-primary'); }
+    }
+}
+
 function initSimulation() {
+    if (!isLooping()) {
+        loop();
+        let btn = document.getElementById('pause-btn');
+        if (btn) { btn.textContent = '⏸ Pausar'; btn.classList.remove('btn-primary'); }
+    }
+
     uiContainer.html('');
     ['ctrl-0', 'ctrl-1', 'ctrl-2'].forEach(id => {
         let el = select(`#${id}`);
         if (el) el.html('');
+    });
+    ['bond-01', 'bond-12'].forEach(id => {
+        let el = document.getElementById(id);
+        if (el) { el.innerHTML = ''; el.style.display = 'none'; }
     });
 
     atoms        = [];
@@ -330,7 +351,7 @@ function buildCovalentUI() {
         sel.option('— Vacío —', 'NONE');
         for (let sym in ELEMENTS) {
             if (sym === 'NONE') continue;
-            if (ELEMENTS[sym].isMetal) continue;   // enlace covalente: solo no metales
+            if (ELEMENTS[sym].isMetal) continue;
             sel.option(`${sym} - ${ELEMENTS[sym].name}`, sym);
         }
         sel.value(atoms[i].symbol);
@@ -341,7 +362,6 @@ function buildCovalentUI() {
             covalentBonds = [];
             resetAtomPositions();
             if (elResultCard) elResultCard.style('display', 'none');
-            // Reconstruir TODOS los átomos para limpiar cualquier estado shared residual
             for (let j = 0; j < atoms.length; j++) {
                 if (j !== i) { atoms[j].buildElectrons(); }
             }
@@ -350,26 +370,38 @@ function buildCovalentUI() {
         });
         ctrl.child(sel);
         ctrl.child(createDiv().class('status-box').id(`data-${i}`));
-
-        let btnBox = createDiv().class('btn-group');
-        if (i === 0) {
-            let b = createButton('Compartir →').id('btn-cov-0r');
-            b.mousePressed(() => shareElectron(0, 1));
-            btnBox.child(b);
-        } else if (i === 1) {
-            let bL = createButton('← A').id('btn-cov-1l');
-            bL.mousePressed(() => shareElectron(0, 1));
-            let bR = createButton('C →').id('btn-cov-1r');
-            bR.mousePressed(() => shareElectron(1, 2));
-            btnBox.child(bL);
-            btnBox.child(bR);
-        } else {
-            let b = createButton('← Compartir').id('btn-cov-2l');
-            b.mousePressed(() => shareElectron(1, 2));
-            btnBox.child(b);
-        }
-        ctrl.child(btnBox);
     }
+
+    // Botones de compartir: en los conectores entre columnas
+    let conn01 = select('#bond-01');
+    conn01.html('');
+    let btn01 = createButton('');
+    btn01.elt.innerHTML = '<span style="font-size:13px">⇄</span><br>Compartir';
+    btn01.id('btn-cov-01');
+    btn01.class('bond-connector-btn');
+    btn01.mousePressed(() => shareElectron(0, 1));
+    conn01.child(btn01);
+    let rec01 = createButton('');
+    rec01.elt.innerHTML = '<span style="font-size:11px">↩</span><br>Recuperar';
+    rec01.id('btn-rec-01');
+    rec01.class('bond-connector-btn bond-recover-btn');
+    rec01.mousePressed(() => unshareElectron(0, 1));
+    conn01.child(rec01);
+
+    let conn12 = select('#bond-12');
+    conn12.html('');
+    let btn12 = createButton('');
+    btn12.elt.innerHTML = '<span style="font-size:13px">⇄</span><br>Compartir';
+    btn12.id('btn-cov-12');
+    btn12.class('bond-connector-btn');
+    btn12.mousePressed(() => shareElectron(1, 2));
+    conn12.child(btn12);
+    let rec12 = createButton('');
+    rec12.elt.innerHTML = '<span style="font-size:11px">↩</span><br>Recuperar';
+    rec12.id('btn-rec-12');
+    rec12.class('bond-connector-btn bond-recover-btn');
+    rec12.mousePressed(() => unshareElectron(1, 2));
+    conn12.child(rec12);
 
     updateUIState();
 }
@@ -415,6 +447,44 @@ function shareElectron(idxA, idxB) {
 
     updateUIState();
     checkCovalentBondFormed();
+}
+
+function unshareElectron(idxA, idxB) {
+    let bondIdx = covalentBonds.findIndex(b =>
+        (b.atomA === idxA && b.atomB === idxB) ||
+        (b.atomA === idxB && b.atomB === idxA)
+    );
+    if (bondIdx === -1) return;
+
+    let bond = covalentBonds[bondIdx];
+    bond.eA.shared     = false;
+    bond.eA.sharedWith = undefined;
+    bond.eA.color      = bond.eA.baseColor;
+    bond.eB.shared     = false;
+    bond.eB.sharedWith = undefined;
+    bond.eB.color      = bond.eB.baseColor;
+    covalentBonds.splice(bondIdx, 1);
+
+    bondFormed   = false;
+    bondProgress = 0;
+    if (elResultCard) elResultCard.style('display', 'none');
+
+    // Mover de vuelta solo los átomos que ya no tienen ningún enlace activo
+    for (let i = 0; i < atoms.length; i++) {
+        let hasAnyBond = covalentBonds.some(b => b.atomA === i || b.atomB === i);
+        if (!hasAnyBond && origPositions[i]) {
+            atoms[i].targetPos = origPositions[i].copy();
+        }
+    }
+
+    updateUIState();
+}
+
+function canRecoverCovalent(idxA, idxB) {
+    return covalentBonds.some(b =>
+        (b.atomA === idxA && b.atomB === idxB) ||
+        (b.atomA === idxB && b.atomB === idxA)
+    );
 }
 
 function canShareCovalent(idxA, idxB) {
@@ -988,11 +1058,17 @@ function updateUIStateCovalent() {
             `);
         }
     }
-    // Habilitar/deshabilitar botones de compartir
-    setBtn('btn-cov-0r', canShareCovalent(0, 1));
-    setBtn('btn-cov-1l', canShareCovalent(0, 1));
-    setBtn('btn-cov-1r', canShareCovalent(1, 2));
-    setBtn('btn-cov-2l', canShareCovalent(1, 2));
+    // Mostrar/ocultar conectores y habilitar/deshabilitar sus botones
+    let conn01 = document.getElementById('bond-01');
+    let conn12 = document.getElementById('bond-12');
+    let both01 = atoms[0].symbol !== 'NONE' && atoms[1].symbol !== 'NONE';
+    let both12 = atoms[1].symbol !== 'NONE' && atoms[2].symbol !== 'NONE';
+    if (conn01) conn01.style.display = both01 ? 'flex' : 'none';
+    if (conn12) conn12.style.display = both12 ? 'flex' : 'none';
+    setBtn('btn-cov-01', canShareCovalent(0, 1));
+    setBtn('btn-cov-12', canShareCovalent(1, 2));
+    setBtn('btn-rec-01', canRecoverCovalent(0, 1));
+    setBtn('btn-rec-12', canRecoverCovalent(1, 2));
 }
 
 // ============================================================
@@ -1151,12 +1227,22 @@ function drawComingSoon() {
 // ============================================================
 // NOMBRE DEL COMPUESTO
 // ============================================================
+// Orden de citación IUPAC (Red Book, tabla IR-4.2): menor índice = se cita antes
+const IUPAC_ORDER = ['B','Si','C','Sb','As','P','N','H','Te','Se','S','O','I','Br','Cl','F'];
+
+function iupacIndex(sym) {
+    let i = IUPAC_ORDER.indexOf(sym);
+    return i === -1 ? 999 : i;
+}
+
 function getCompoundName() {
     let syms = atoms.filter(a => a.symbol !== 'NONE').map(a => a.symbol);
     let counts = {};
     syms.forEach(s => counts[s] = (counts[s] || 0) + 1);
-    let metals    = [...new Set(syms.filter(s => ELEMENTS[s].isMetal))];
+    let metals    = [...new Set(syms.filter(s =>  ELEMENTS[s].isMetal))];
     let nonMetals = [...new Set(syms.filter(s => !ELEMENTS[s].isMetal))];
+    // Ordenar no-metales según secuencia IUPAC
+    nonMetals.sort((a, b) => iupacIndex(a) - iupacIndex(b));
     let result = '';
     for (let m  of metals)    result += m  + (counts[m]  > 1 ? toSub(counts[m])  : '');
     for (let nm of nonMetals) result += nm + (counts[nm] > 1 ? toSub(counts[nm]) : '');
