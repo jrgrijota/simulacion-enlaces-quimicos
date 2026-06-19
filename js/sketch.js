@@ -4,6 +4,19 @@
 const SHELL_RADII = [36, 60, 84, 108];
 const BOND_COLOR  = '#F59E0B';
 
+// ============================================================
+// DATOS PARA ENLACE METÁLICO
+// ============================================================
+const METALLIC_METALS = {
+    Na: { valence: 1, charge: 1, color: '#F43F5E', name: 'Sodio',    mp:   98 },
+    K:  { valence: 1, charge: 1, color: '#C084FC', name: 'Potasio',  mp:   64 },
+    Mg: { valence: 2, charge: 2, color: '#34D399', name: 'Magnesio', mp:  650 },
+    Ca: { valence: 2, charge: 2, color: '#67E8F9', name: 'Calcio',   mp:  842 },
+    Al: { valence: 3, charge: 3, color: '#A78BFA', name: 'Aluminio', mp:  660 },
+};
+const LATTICE_COLS = 5;
+const LATTICE_ROWS = 4;
+
 const ELEMENTS = {
     H:    { Z: 1,  config: [1],            nobleTarget: 2, isMetal: false, color: '#38BDF8', name: 'Hidrógeno' },
     Li:   { Z: 3,  config: [2, 1],         nobleTarget: 2, isMetal: true,  color: '#A78BFA', name: 'Litio'     },
@@ -30,6 +43,21 @@ let origPositions = [];
 let atomSelects   = [];
 let elResultCard  = null;
 let elResultBody  = null;
+
+// Metallic bond mode state
+let metallicMetal  = 'Na';
+let latticeAtoms   = [];
+let freeElectrons  = [];
+let metallicPhase  = 'normal'; // 'normal' | 'voltage' | 'deform'
+let deformOffset   = 0;
+let deformTarget   = 0;
+let deformDone     = false;
+let latticeSpacing = 85;
+let latticeStartX  = 0;
+let latticeStartY  = 0;
+let elBtnVoltage   = null;
+let elBtnDeform    = null;
+let elMetallicInfo = null;
 
 // ============================================================
 // HELPERS
@@ -82,6 +110,8 @@ function draw() {
         drawEmptySlots();
         drawAtomLabels();
         if (bondFormed) drawBondEffect();
+    } else if (currentMode === 'METALLIC') {
+        drawMetallic();
     } else {
         drawComingSoon();
     }
@@ -113,15 +143,24 @@ function initSimulation() {
         if (el) el.html('');
     });
 
-    atoms        = [];
-    atomSelects  = [];
-    elResultCard = null;
-    elResultBody = null;
-    bondFormed   = false;
-    bondProgress = 0;
+    atoms          = [];
+    atomSelects    = [];
+    elResultCard   = null;
+    elResultBody   = null;
+    bondFormed     = false;
+    bondProgress   = 0;
+    metallicPhase  = 'normal';
+    deformOffset   = 0;
+    deformTarget   = 0;
+    deformDone     = false;
+    elBtnVoltage   = null;
+    elBtnDeform    = null;
+    elMetallicInfo = null;
 
     let ctrlRow = select('#atom-controls-row');
     if (ctrlRow) ctrlRow.style('display', currentMode === 'IONIC' ? 'flex' : 'none');
+
+    updateModeInfoCard(currentMode);
 
     if (currentMode === 'IONIC') {
         let cx = width / 2, cy = constrain(height * 0.44, 100, 230);
@@ -137,6 +176,9 @@ function initSimulation() {
         atoms[1].setElement('Cl');
         atoms[2].setElement('NONE');
         buildIonicUI();
+    } else if (currentMode === 'METALLIC') {
+        initMetallicSimulation();
+        buildMetallicUI();
     }
 }
 
@@ -693,7 +735,7 @@ function drawBondEffect() {
 }
 
 // ============================================================
-// PANTALLA "PRÓXIMAMENTE"
+// PANTALLA "PRÓXIMAMENTE" (solo para modos sin implementar)
 // ============================================================
 function drawComingSoon() {
     let bw = 310, bh = 84;
@@ -714,6 +756,422 @@ function drawComingSoon() {
     fill('#475569');
     textSize(11);
     text('Selecciona Enlace Iónico para comenzar', width / 2, height / 2 + 13);
+}
+
+// ============================================================
+// TARJETA DE INFORMACIÓN POR MODO
+// ============================================================
+function updateModeInfoCard(mode) {
+    let content = document.getElementById('mode-info-content');
+    if (!content) return;
+    if (mode === 'IONIC') {
+        content.innerHTML = `
+            <p><b>1.</b> Elige un <em>metal</em> y un <em>no metal</em> en las ranuras A / B / C.</p>
+            <p><b>2.</b> Pulsa <em>Ceder e⁻</em> para transferir electrones de valencia.</p>
+            <p><b>3.</b> Cuando los iones tienen cargas opuestas y configuración de gas noble (<b>octeto</b> o <b>dueto</b>), la atracción de <b>Coulomb</b> forma el enlace.</p>
+            <p>Prueba con <b>MgCl₂</b>, <b>Na₂O</b> o <b>KF</b> usando las tres ranuras.</p>`;
+    } else if (mode === 'METALLIC') {
+        content.innerHTML = `
+            <p><b>1.</b> Los átomos metálicos <em>ceden</em> sus e⁻ de valencia a un <em>mar compartido</em>.</p>
+            <p><b>2.</b> La red de <b>cationes</b> y el <b>mar de e⁻</b> se atraen: eso <em>es</em> el enlace metálico.</p>
+            <p>Pulsa <em>Aplicar voltaje</em> para ver la <b>conductividad</b>, o <em>Deformar red</em> para la <b>maleabilidad</b>.</p>`;
+    } else {
+        content.innerHTML = `<p>Selecciona un modo para comenzar.</p>`;
+    }
+}
+
+// ============================================================
+// ENLACE METÁLICO — INICIALIZACIÓN
+// ============================================================
+function initMetallicSimulation() {
+    latticeAtoms  = [];
+    freeElectrons = [];
+
+    let colSp = (width  * 0.60) / (LATTICE_COLS - 1);
+    let rowSp = (height * 0.58) / (LATTICE_ROWS - 1);
+    latticeSpacing = constrain(min(colSp, rowSp), 60, 92);
+
+    let totalW    = (LATTICE_COLS - 1) * latticeSpacing;
+    let totalH    = (LATTICE_ROWS - 1) * latticeSpacing;
+    latticeStartX = width  / 2 - totalW / 2;
+    latticeStartY = height / 2 - totalH / 2;
+
+    for (let r = 0; r < LATTICE_ROWS; r++) {
+        for (let c = 0; c < LATTICE_COLS; c++) {
+            latticeAtoms.push({
+                baseX: latticeStartX + c * latticeSpacing,
+                y:     latticeStartY + r * latticeSpacing,
+                row: r, col: c,
+            });
+        }
+    }
+
+    const metal = METALLIC_METALS[metallicMetal];
+    const numE  = LATTICE_COLS * LATTICE_ROWS * metal.valence;
+    const pad   = latticeSpacing * 0.6;
+    const minX  = latticeStartX - pad;
+    const maxX  = latticeStartX + (LATTICE_COLS - 1) * latticeSpacing + pad;
+    const minY  = latticeStartY - pad;
+    const maxY  = latticeStartY + (LATTICE_ROWS - 1) * latticeSpacing + pad;
+
+    for (let i = 0; i < numE; i++) {
+        let spd = random(0.8, 1.8), ang = random(TWO_PI);
+        freeElectrons.push({
+            x: random(minX, maxX), y: random(minY, maxY),
+            vx: cos(ang) * spd,   vy: sin(ang) * spd,
+        });
+    }
+}
+
+// ============================================================
+// ENLACE METÁLICO — UI
+// ============================================================
+function buildMetallicUI() {
+    let metallicMetalSel = null;
+
+    // Reiniciar
+    let resetRow = createDiv().class('reset-row');
+    let resetBtn = createButton('↺ Reiniciar simulación');
+    resetBtn.mousePressed(() => {
+        if (metallicMetalSel) metallicMetal = metallicMetalSel.value();
+        metallicPhase = 'normal';
+        deformOffset  = 0; deformTarget = 0; deformDone = false;
+        initMetallicSimulation();
+        if (elBtnVoltage) elBtnVoltage.html('⚡ Aplicar voltaje');
+        if (elBtnDeform)  elBtnDeform.html('↔ Deformar red');
+        refreshMetallicInfo();
+    });
+    resetRow.child(resetBtn);
+    uiContainer.child(resetRow);
+
+    // Selector de metal
+    let selCard  = createDiv().class('card');
+    selCard.child(createDiv('Metal').class('atom-card-label'));
+    let selBody  = createDiv().class('card-body-static');
+    metallicMetalSel = createSelect();
+    for (let sym in METALLIC_METALS) {
+        let m = METALLIC_METALS[sym];
+        metallicMetalSel.option(`${sym} — ${m.name}  (${m.valence} e⁻ val.)`, sym);
+    }
+    metallicMetalSel.value(metallicMetal);
+    metallicMetalSel.changed(() => {
+        metallicMetal = metallicMetalSel.value();
+        metallicPhase = 'normal';
+        deformOffset  = 0; deformTarget = 0; deformDone = false;
+        initMetallicSimulation();
+        if (elBtnVoltage) elBtnVoltage.html('⚡ Aplicar voltaje');
+        if (elBtnDeform)  elBtnDeform.html('↔ Deformar red');
+        refreshMetallicInfo();
+    });
+    selBody.child(metallicMetalSel);
+    selCard.child(selBody);
+    uiContainer.child(selCard);
+
+    // Estado del enlace
+    let infoCard = createDiv().class('card');
+    infoCard.child(createDiv('Estado del enlace').class('atom-card-label'));
+    elMetallicInfo = createDiv().class('card-body-static');
+    infoCard.child(elMetallicInfo);
+    uiContainer.child(infoCard);
+
+    // Experimentos
+    let actCard = createDiv().class('card');
+    actCard.child(createDiv('Experimentos').class('atom-card-label'));
+    let actBody = createDiv().class('card-body-static');
+
+    elBtnVoltage = createButton('⚡ Aplicar voltaje');
+    elBtnVoltage.class('btn-primary');
+    elBtnVoltage.style('width', '100%').style('margin-bottom', '5px');
+    elBtnVoltage.mousePressed(() => {
+        if (metallicPhase === 'voltage') {
+            metallicPhase = 'normal';
+            for (let e of freeElectrons) {
+                let spd = random(0.8, 1.8), ang = random(TWO_PI);
+                e.vx = cos(ang) * spd; e.vy = sin(ang) * spd;
+            }
+            elBtnVoltage.html('⚡ Aplicar voltaje');
+        } else {
+            metallicPhase = 'voltage';
+            deformOffset  = 0; deformTarget = 0; deformDone = false;
+            for (let e of freeElectrons) {
+                e.vx = random(0.8, 2.2); e.vy = random(-0.5, 0.5);
+            }
+            elBtnVoltage.html('■ Quitar voltaje');
+            if (elBtnDeform) elBtnDeform.html('↔ Deformar red');
+        }
+        refreshMetallicInfo();
+    });
+    actBody.child(elBtnVoltage);
+
+    elBtnDeform = createButton('↔ Deformar red');
+    elBtnDeform.style('width', '100%');
+    elBtnDeform.mousePressed(() => {
+        if (metallicPhase === 'deform') {
+            metallicPhase = 'normal';
+            deformOffset  = 0; deformTarget = 0; deformDone = false;
+            elBtnDeform.html('↔ Deformar red');
+        } else {
+            metallicPhase = 'deform';
+            deformTarget  = latticeSpacing * 0.5;
+            deformDone    = false;
+            elBtnVoltage.html('⚡ Aplicar voltaje');
+            elBtnDeform.html('↺ Restaurar red');
+        }
+        refreshMetallicInfo();
+    });
+    actBody.child(elBtnDeform);
+
+    actCard.child(actBody);
+    uiContainer.child(actCard);
+
+    refreshMetallicInfo();
+}
+
+function refreshMetallicInfo() {
+    if (!elMetallicInfo) return;
+    const metal    = METALLIC_METALS[metallicMetal];
+    const numE     = LATTICE_COLS * LATTICE_ROWS * metal.valence;
+    const phaseMap = {
+        normal:  `<span style="color:#10B981">Normal (equilibrio)</span>`,
+        voltage: `<span style="color:#FBBF24">⚡ Voltaje aplicado</span>`,
+        deform:  `<span style="color:#F59E0B">↔ Deformando red</span>`,
+    };
+    elMetallicInfo.html(`
+        <div>Metal: <b style="color:${metal.color}">${metallicMetal} — ${metal.name}</b></div>
+        <div>e⁻ de valencia: <b>${metal.valence}</b> por átomo</div>
+        <div>Catión: <b>${metallicMetal}<sup>${metal.charge}+</sup></b></div>
+        <div>e⁻ en el mar: <b>${numE}</b></div>
+        <div style="margin-top:4px">Estado: ${phaseMap[metallicPhase] || '—'}</div>
+    `);
+}
+
+// ============================================================
+// ENLACE METÁLICO — BUCLE DE DIBUJO
+// ============================================================
+function drawMetallic() {
+    updateMetallicElectrons();
+    updateDeformAnim();
+    drawMetallicSeaBg();
+    drawLatticeAtoms();
+    drawFreeElectrons();
+    drawMetallicOverlay();
+}
+
+function updateMetallicElectrons() {
+    const pad  = latticeSpacing * 0.65;
+    const minX = latticeStartX - pad;
+    const maxX = latticeStartX + (LATTICE_COLS - 1) * latticeSpacing + pad;
+    const minY = latticeStartY - pad;
+    const maxY = latticeStartY + (LATTICE_ROWS - 1) * latticeSpacing + pad;
+
+    for (let e of freeElectrons) {
+        if (metallicPhase === 'voltage') {
+            e.vx += 0.045;
+            if (e.vx > 2.8) e.vx = 2.8;
+        } else {
+            if (random() < 0.012) {
+                e.vx += random(-0.4, 0.4);
+                e.vy += random(-0.4, 0.4);
+            }
+            let spd = sqrt(e.vx * e.vx + e.vy * e.vy);
+            if (spd > 2.2) { e.vx = e.vx / spd * 2.2; e.vy = e.vy / spd * 2.2; }
+            if (spd < 0.3) { e.vx *= 1.3; e.vy *= 1.3; }
+        }
+
+        e.x += e.vx;
+        e.y += e.vy;
+
+        if (metallicPhase === 'voltage') {
+            if (e.x > maxX) e.x = minX;
+            if (e.x < minX) e.x = maxX;
+            if (e.y < minY || e.y > maxY) { e.vy *= -1; e.y = constrain(e.y, minY, maxY); }
+        } else {
+            if (e.x < minX || e.x > maxX) { e.vx *= -1; e.x = constrain(e.x, minX, maxX); }
+            if (e.y < minY || e.y > maxY) { e.vy *= -1; e.y = constrain(e.y, minY, maxY); }
+        }
+    }
+}
+
+function updateDeformAnim() {
+    if (metallicPhase !== 'deform' || deformDone) return;
+    deformOffset = lerp(deformOffset, deformTarget, 0.025);
+    if (abs(deformOffset - deformTarget) < 0.8) {
+        deformOffset = deformTarget;
+        deformDone   = true;
+    }
+}
+
+// ── Fondo del mar de electrones ──────────────────────────────
+function drawMetallicSeaBg() {
+    const metal  = METALLIC_METALS[metallicMetal];
+    const c      = color(metal.color);
+    const cR = red(c), cG = green(c), cB = blue(c);
+    const pad    = latticeSpacing * 0.65;
+    const rx     = latticeStartX - pad;
+    const ry     = latticeStartY - pad;
+    const rw     = (LATTICE_COLS - 1) * latticeSpacing + pad * 2;
+    const rh     = (LATTICE_ROWS - 1) * latticeSpacing + pad * 2;
+    const pulse  = sin(frameCount * 0.022) * 0.5 + 0.5;
+
+    noStroke();
+    fill(cR, cG, cB, 11 + pulse * 7);
+    rect(rx, ry, rw, rh, 16);
+
+    noFill();
+    stroke(cR, cG, cB, 52 + pulse * 32);
+    strokeWeight(1.5);
+    rect(rx, ry, rw, rh, 16);
+}
+
+// ── Red cristalina de cationes ────────────────────────────────
+function drawLatticeAtoms() {
+    const metal   = METALLIC_METALS[metallicMetal];
+    const c       = color(metal.color);
+    const cR = red(c), cG = green(c), cB = blue(c);
+    const nucSize = max(latticeSpacing * 0.40, 26);
+    const orbitR  = latticeSpacing * 0.36;
+    const sup     = metal.charge === 1 ? '+' : metal.charge + '+';
+
+    for (let atom of latticeAtoms) {
+        let ax = atom.baseX;
+        if (metallicPhase === 'deform' && atom.row < 2) ax += deformOffset;
+
+        // Órbita (punteada)
+        noFill();
+        stroke(cR, cG, cB, 28);
+        strokeWeight(1);
+        drawingContext.setLineDash([3, 4]);
+        ellipse(ax, atom.y, orbitR * 2, orbitR * 2);
+        drawingContext.setLineDash([]);
+
+        // Halo
+        noStroke();
+        fill(cR, cG, cB, 16);
+        circle(ax, atom.y, nucSize + 12);
+
+        // Núcleo
+        fill(cR, cG, cB, 215);
+        circle(ax, atom.y, nucSize);
+
+        // Símbolo + carga
+        fill('#0F172A');
+        textStyle(BOLD);
+        let symSize = max(nucSize * 0.34, 10);
+        let supSize = max(nucSize * 0.22, 7);
+        textSize(symSize);
+        textAlign(LEFT, CENTER);
+        let symW  = textWidth(metallicMetal);
+        textSize(supSize);
+        let supW  = textWidth(sup);
+        let tX    = ax - (symW + supW + 1) / 2;
+        textSize(symSize);
+        text(metallicMetal, tX, atom.y);
+        textSize(supSize);
+        text(sup, tX + symW + 1, atom.y - max(nucSize * 0.11, 4));
+        textStyle(NORMAL);
+        textAlign(CENTER, CENTER);
+    }
+}
+
+// ── Mar de electrones libres ──────────────────────────────────
+function drawFreeElectrons() {
+    noStroke();
+    for (let e of freeElectrons) {
+        fill(80, 160, 255, 30);
+        circle(e.x, e.y, 22);
+        fill(140, 200, 255, 75);
+        circle(e.x, e.y, 13);
+        fill(215, 235, 255);
+        circle(e.x, e.y, 6);
+    }
+}
+
+// ── Indicadores de experimento ────────────────────────────────
+function drawMetallicOverlay() {
+    if      (metallicPhase === 'voltage') drawVoltageOverlay();
+    else if (metallicPhase === 'deform')  drawDeformOverlay();
+}
+
+function drawVoltageOverlay() {
+    const pad    = latticeSpacing * 0.65;
+    const rightX = latticeStartX + (LATTICE_COLS - 1) * latticeSpacing + pad + 32;
+    const leftX  = latticeStartX - pad - 32;
+    const midY   = latticeStartY + ((LATTICE_ROWS - 1) * latticeSpacing) / 2;
+    const topY   = latticeStartY - pad;
+    const botY   = latticeStartY + (LATTICE_ROWS - 1) * latticeSpacing + pad;
+
+    // Electrodos
+    noStroke();
+    textAlign(CENTER, CENTER);
+    textStyle(BOLD);
+    textSize(22);
+    fill('#EF4444');
+    text('+', rightX, midY);
+    fill('#38BDF8');
+    text('−', leftX, midY);
+    textStyle(NORMAL);
+
+    // Etiquetas
+    fill('#94A3B8');
+    textAlign(CENTER, BOTTOM);
+    textSize(11);
+    text('e⁻  →', width / 2, topY - 6);
+    fill('#FBBF24');
+    text('←  I  (corriente convencional)', width / 2, topY - 20);
+
+    // Mensaje inferior
+    noStroke();
+    fill(16, 185, 129, 220);
+    textAlign(CENTER, CENTER);
+    textSize(14);
+    textStyle(BOLD);
+    text('⚡ Conductividad eléctrica', width / 2, botY + 22);
+    textStyle(NORMAL);
+}
+
+function drawDeformOverlay() {
+    const pad     = latticeSpacing * 0.65;
+    const leftX   = latticeStartX - pad;
+    const botY    = latticeStartY + (LATTICE_ROWS - 1) * latticeSpacing + pad;
+    const shearY  = latticeStartY + latticeSpacing * 1.5; // entre fila 1 y fila 2
+
+    // Flecha de fuerza sobre la mitad superior
+    let arrowEnd   = leftX - 8;
+    let arrowStart = arrowEnd - 42;
+    stroke('#F59E0B');
+    strokeWeight(2.5);
+    line(arrowStart, shearY - latticeSpacing * 0.5, arrowEnd, shearY - latticeSpacing * 0.5);
+    push();
+    translate(arrowEnd, shearY - latticeSpacing * 0.5);
+    fill('#F59E0B');
+    noStroke();
+    triangle(-9, 5, -9, -5, 0, 0);
+    pop();
+    noStroke();
+    fill('#F59E0B');
+    textAlign(RIGHT, CENTER);
+    textSize(11);
+    text('Fuerza', arrowStart - 4, shearY - latticeSpacing * 0.5);
+
+    // Línea de plano de cizalladura
+    let regX = latticeStartX - pad;
+    let regW = (LATTICE_COLS - 1) * latticeSpacing + pad * 2 + deformOffset;
+    stroke(148, 163, 184, 90);
+    strokeWeight(1);
+    drawingContext.setLineDash([5, 4]);
+    line(regX, shearY, regX + regW, shearY);
+    drawingContext.setLineDash([]);
+
+    // Mensaje cuando la deformación termina
+    if (deformDone) {
+        noStroke();
+        fill(16, 185, 129, 220);
+        textAlign(CENTER, CENTER);
+        textSize(14);
+        textStyle(BOLD);
+        text('El enlace no se rompe — maleabilidad', width / 2, botY + 22);
+        textStyle(NORMAL);
+    }
 }
 
 // ============================================================
