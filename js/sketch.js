@@ -436,12 +436,30 @@ function checkCovalentBondFormed() {
 
     bondFormed = true;
     let activeIdx = atoms.reduce((acc, a, i) => a.symbol !== 'NONE' ? [...acc, i] : acc, []);
-    let n       = activeIdx.length;
-    let spacing = 140;
-    let cx      = width / 2;
-    let cy      = constrain(height * 0.44, 100, 230);
-    for (let k = 0; k < n; k++) {
-        atoms[activeIdx[k]].targetPos = createVector(cx + (k - (n - 1) / 2) * spacing, cy);
+    let n  = activeIdx.length;
+    let cx = width / 2;
+    let cy = constrain(height * 0.44, 100, 230);
+
+    // Posicionar los átomos centrados en pantalla pero manteniendo la distancia de enlace
+    // (radio_A + radio_B) × 0.75 para que la lenteja siga siendo visible.
+    if (n === 2) {
+        let i0 = activeIdx[0], i1 = activeIdx[1];
+        let r0 = SHELL_RADII[atoms[i0].nativeMaxShell()];
+        let r1 = SHELL_RADII[atoms[i1].nativeMaxShell()];
+        let d  = (r0 + r1) * 0.75;
+        atoms[i0].targetPos = createVector(cx - d / 2, cy);
+        atoms[i1].targetPos = createVector(cx + d / 2, cy);
+    } else if (n === 3) {
+        let i0 = activeIdx[0], i1 = activeIdx[1], i2 = activeIdx[2];
+        let r0 = SHELL_RADII[atoms[i0].nativeMaxShell()];
+        let r1 = SHELL_RADII[atoms[i1].nativeMaxShell()];
+        let r2 = SHELL_RADII[atoms[i2].nativeMaxShell()];
+        let d01 = (r0 + r1) * 0.75;
+        let d12 = (r1 + r2) * 0.75;
+        // Átomo central en cx; izquierda a -d01, derecha a +d12
+        atoms[i0].targetPos = createVector(cx - d01, cy);
+        atoms[i1].targetPos = createVector(cx,       cy);
+        atoms[i2].targetPos = createVector(cx + d12, cy);
     }
 
     if (elResultCard && elResultBody) {
@@ -696,21 +714,26 @@ class Atom {
         for (let e of this.electrons) {
             let ex, ey;
             if (currentMode === 'COVALENT' && e.shared) {
-                // Elipse dentro de la zona de intersección de las dos capas de valencia
-                let partner = atoms[e.sharedWith];
+                // Elipse dentro de la zona de intersección.
+                // IMPORTANTE: ambos electrones del par usan el mismo sistema de referencia
+                // (siempre desde el átomo de índice más bajo → eje A→B consistente),
+                // evitando que la transformación de coordenadas los coloque en el mismo punto.
+                let partnerIdx = e.sharedWith;
+                let partner    = atoms[partnerIdx];
                 if (partner && partner.symbol !== 'NONE') {
-                    let ax  = this.pos.x, ay = this.pos.y;
-                    let ddx = partner.pos.x - ax, ddy = partner.pos.y - ay;
+                    let isLower  = this.index < partnerIdx;
+                    let atomLow  = isLower ? this    : partner;
+                    let atomHigh = isLower ? partner : this;
+                    let ax  = atomLow.pos.x,  ay  = atomLow.pos.y;
+                    let bx  = atomHigh.pos.x, by  = atomHigh.pos.y;
+                    let ddx = bx - ax, ddy = by - ay;
                     let d   = sqrt(ddx * ddx + ddy * ddy);
                     if (d > 1) {
                         let ang  = atan2(ddy, ddx);
-                        let rA   = SHELL_RADII[this.nativeMaxShell()];
-                        let rB   = SHELL_RADII[partner.nativeMaxShell()];
-                        // Centro de la intersección desde este átomo (coord. local)
+                        let rA   = SHELL_RADII[atomLow.nativeMaxShell()];
+                        let rB   = SHELL_RADII[atomHigh.nativeMaxShell()];
                         let xc   = (d * d + rA * rA - rB * rB) / (2 * d);
-                        // Semi-eje perpendicular al enlace (semidistancia de cuerda)
                         let hSq  = rA * rA - xc * xc;
-                        // Semi-eje paralelo al enlace (confinado dentro de ambas circunferencias)
                         let aMax = min(rA - xc, rB - (d - xc));
                         if (hSq > 0 && aMax > 1) {
                             let h    = sqrt(hSq);
@@ -720,9 +743,8 @@ class Atom {
                             ex = ax + lx * cos(ang) - ly * sin(ang);
                             ey = ay + lx * sin(ang) + ly * cos(ang);
                         } else {
-                            // Átomos aún no lo suficientemente cerca: órbita circular normal
-                            ex = ax + cos(e.angle) * e.radius;
-                            ey = ay + sin(e.angle) * e.radius;
+                            ex = this.pos.x + cos(e.angle) * e.radius;
+                            ey = this.pos.y + sin(e.angle) * e.radius;
                         }
                     } else {
                         ex = this.pos.x + cos(e.angle) * e.radius;
