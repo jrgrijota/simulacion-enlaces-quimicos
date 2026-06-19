@@ -115,6 +115,25 @@ function handleModeChange() {
 // ============================================================
 // INICIALIZACIÓN
 // ============================================================
+const INFO_IONIC = `
+    <p><b>1.</b> Elige un <em>metal</em> y un <em>no metal</em> en las ranuras A / B / C.</p>
+    <p><b>2.</b> Pulsa <em>Ceder e⁻</em> para transferir electrones de valencia del metal al no metal.</p>
+    <p><b>3.</b> Cuando los iones tienen cargas opuestas y configuración de gas noble (<b>octeto</b> o <b>dueto</b>), la atracción de <b>Coulomb</b> forma el enlace.</p>
+    <p>Prueba con <b>NaCl</b>, <b>MgCl₂</b> o <b>Na₂O</b>.</p>
+`;
+const INFO_COVALENT = `
+    <p><b>1.</b> Elige dos <em>no metales</em> en las ranuras A y B (o A, B y C para moléculas triatómicas).</p>
+    <p><b>2.</b> Pulsa <em>Compartir</em> para que cada átomo aporte un electrón al par compartido.</p>
+    <p><b>3.</b> El par de electrones compartido orbita en una <b>lemniscata</b> (∞) entre ambos núcleos y cuenta para el octeto de los dos átomos.</p>
+    <p>Prueba con <b>H₂</b>, <b>Cl₂</b>, <b>O₂</b> (doble enlace) o <b>HCl</b>. Para <b>H₂O</b> usa las tres ranuras: A=H, B=O, C=H.</p>
+`;
+
+function updateModeInfo() {
+    let el = document.getElementById('mode-info');
+    if (!el) return;
+    el.innerHTML = currentMode === 'COVALENT' ? INFO_COVALENT : INFO_IONIC;
+}
+
 function initSimulation() {
     uiContainer.html('');
     ['ctrl-0', 'ctrl-1', 'ctrl-2'].forEach(id => {
@@ -128,6 +147,8 @@ function initSimulation() {
     elResultBody = null;
     bondFormed   = false;
     bondProgress = 0;
+
+    updateModeInfo();
 
     let ctrlRow = select('#atom-controls-row');
     let showRow = currentMode === 'IONIC' || currentMode === 'COVALENT';
@@ -151,9 +172,9 @@ function initSimulation() {
         covalentBonds = [];
         let cx = width / 2, cy = constrain(height * 0.44, 100, 230);
         origPositions = [
-            createVector(cx - width * 0.22, cy),
-            createVector(cx + width * 0.22, cy),
-            createVector(cx,                cy)
+            createVector(cx - width * 0.26, cy),
+            createVector(cx,                cy),
+            createVector(cx + width * 0.26, cy)
         ];
         for (let i = 0; i < 3; i++) {
             atoms.push(new Atom(origPositions[i].x, origPositions[i].y, i));
@@ -317,6 +338,10 @@ function buildCovalentUI() {
             covalentBonds = [];
             resetAtomPositions();
             if (elResultCard) elResultCard.style('display', 'none');
+            // Reconstruir TODOS los átomos para limpiar cualquier estado shared residual
+            for (let j = 0; j < atoms.length; j++) {
+                if (j !== i) { atoms[j].buildElectrons(); }
+            }
             atoms[i].setElement(sel.value());
             updateUIState();
         });
