@@ -335,3 +335,53 @@ button:disabled { opacity: 0.28; cursor: not-allowed; }
     font-size: 10.5px;
     padding: 5px 3px;
 }
+
+/* ─── BOND CONNECTOR (covalent) ───────────────── */
+.bond-connector {
+    width: 54px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.bond-connector::before,
+.bond-connector::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 1px;
+    background: var(--border-strong);
+    opacity: 0.4;
+}
+.bond-connector::before { top: 0;    height: calc(50% - 30px); }
+.bond-connector::after  { bottom: 0; height: calc(50% - 30px); }
+
+.bond-connector-btn {
+    width: 46px;
+    padding: 8px 2px;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1.5;
+    text-align: center;
+    border-radius: 10px;
+    letter-spacing: 0.03em;
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(59, 130, 246, 0.08);
+}
+
+.bond-recover-btn {
+    border-color: var(--border-strong);
+    color: var(--text-muted);
+    background: transparent;
+    margin-top: 4px;
+}
+.bond-recover-btn:hover:not(:disabled) {
+    border-color: var(--danger);
+    color: var(--danger);
+    background: rgba(239, 68, 68, 0.08);
+}

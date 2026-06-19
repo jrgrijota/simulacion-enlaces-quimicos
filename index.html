@@ -33,6 +33,11 @@
 
             <div class="card" id="mode-info-card" style="padding: 10px 12px 11px;">
                 <div class="info-section" id="mode-info-content"></div>
+                <div id="mode-info" class="info-section"></div>
+            </div>
+
+            <div style="padding: 0 2px;">
+                <button id="pause-btn" onclick="togglePause()" style="width:100%; font-size:12px; padding: 7px 10px;">⏸ Pausar</button>
             </div>
 
             <div id="ui-overlay"></div>
@@ -44,7 +49,9 @@
         <div id="sim-frame"></div>
         <div id="atom-controls-row">
             <div id="ctrl-0" class="atom-ctrl"></div>
+            <div id="bond-01" class="bond-connector" style="display:none"></div>
             <div id="ctrl-1" class="atom-ctrl"></div>
+            <div id="bond-12" class="bond-connector" style="display:none"></div>
             <div id="ctrl-2" class="atom-ctrl"></div>
         </div>
     </div>
