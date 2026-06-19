@@ -20,20 +20,20 @@
                 </div>
             </div>
 
-            <div class="card is-expanded">
-                <button class="card-trigger">Modo <span class="card-chevron">▼</span></button>
-                <div class="card-body">
-                    <select id="mode-select">
-                        <option value="IONIC">Enlace Iónico</option>
-                        <option value="COVALENT">Enlace Covalente</option>
-                        <option value="METALLIC">Enlace Metálico</option>
-                    </select>
-                </div>
+            <div class="card mode-card">
+                <select id="mode-select">
+                    <option value="IONIC">Enlace Iónico</option>
+                    <option value="COVALENT">Enlace Covalente</option>
+                    <option value="METALLIC">Enlace Metálico</option>
+                </select>
             </div>
 
-            <div class="card" id="mode-info-card" style="padding: 10px 12px 11px;">
-                <div class="info-section" id="mode-info-content"></div>
-                <div id="mode-info" class="info-section"></div>
+            <div class="card is-expanded" id="mode-info-card">
+                <button class="card-trigger">Descripción <span class="card-chevron">▼</span></button>
+                <div class="card-body" id="mode-info-wrapper">
+                    <div class="info-section" id="mode-info-content"></div>
+                    <div id="mode-info" class="info-section"></div>
+                </div>
             </div>
 
             <div style="padding: 0 2px;">
