@@ -131,7 +131,9 @@ const INFO_COVALENT = `
 function updateModeInfo() {
     let el = document.getElementById('mode-info');
     if (!el) return;
-    el.innerHTML = currentMode === 'COVALENT' ? INFO_COVALENT : INFO_IONIC;
+    if (currentMode === 'COVALENT') el.innerHTML = INFO_COVALENT;
+    else if (currentMode === 'IONIC') el.innerHTML = INFO_IONIC;
+    else el.innerHTML = '<p>Selecciona <em>Enlace Iónico</em> o <em>Enlace Covalente</em> para comenzar.</p>';
 }
 
 function initSimulation() {
