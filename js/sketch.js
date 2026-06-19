@@ -3,6 +3,8 @@
 // ============================================================
 const SHELL_RADII = [36, 60, 84, 108];
 const BOND_COLOR  = '#F59E0B';
+let   _BOND_COLOR_OBJ     = null; // initialized in setup() once p5 is ready
+let   _COVALENT_COLOR_OBJ = null;
 
 // ============================================================
 // DATOS PARA ENLACE METÁLICO
@@ -63,14 +65,15 @@ let elBtnDeform    = null;
 let elMetallicInfo = null;
 
 // Ionic crystal lattice state
-let ionicCrystalMode    = false;
-let ionicCrystalPhase   = 'normal'; // 'normal' | 'voltage' | 'shear'
-let ionicCrystalCols    = 7;
-let ionicCrystalRows    = 5;
-let ionicCrystalSpacing = 72;
-let ionicCrystalStartX  = 0;
-let ionicCrystalStartY  = 0;
-let ionicCrystalAtoms   = [];
+let ionicCrystalMode      = false;
+let ionicCrystalPhase     = 'normal'; // 'normal' | 'voltage' | 'shear'
+let ionicCrystalCols      = 7;
+let ionicCrystalRows      = 5;
+let ionicCrystalSpacing   = 72;
+let ionicCrystalStartX    = 0;
+let ionicCrystalStartY    = 0;
+let ionicCrystalAtoms     = [];
+let ionicCrystalRowArrays = []; // cached per-row slices for fast access
 let ionicCatSym         = '';
 let ionicCatColor       = '';
 let ionicCatCharge      = 0;
@@ -125,6 +128,9 @@ function setup() {
     let cont = document.getElementById('sim-frame');
     let cnv  = createCanvas(cont.offsetWidth, cont.offsetHeight);
     cnv.parent('sim-frame');
+    frameRate(60);
+    _BOND_COLOR_OBJ     = color(BOND_COLOR);
+    _COVALENT_COLOR_OBJ = color('#E879F9');
     uiContainer = select('#ui-overlay');
     select('#mode-select').changed(handleModeChange);
     initSimulation();
@@ -160,7 +166,49 @@ function draw() {
 function windowResized() {
     let cont = document.getElementById('sim-frame');
     resizeCanvas(cont.offsetWidth, cont.offsetHeight);
-    initSimulation();
+    repositionForNewSize();
+}
+
+// Recalculates positions after resize without destroying simulation state
+function repositionForNewSize() {
+    if (currentMode === 'IONIC' && !ionicCrystalMode) {
+        let cx = width / 2, cy = constrain(height * 0.44, 100, 230);
+        origPositions = [
+            createVector(cx - width * 0.26, cy),
+            createVector(cx,                cy),
+            createVector(cx + width * 0.26, cy)
+        ];
+        if (!bondFormed) {
+            for (let i = 0; i < atoms.length; i++) {
+                if (origPositions[i]) {
+                    atoms[i].pos.set(origPositions[i]);
+                    atoms[i].targetPos.set(origPositions[i]);
+                }
+            }
+        }
+    } else if (currentMode === 'IONIC' && ionicCrystalMode) {
+        initIonicCrystalGrid(); // recalculates base positions; phase/offsets preserved
+    } else if (currentMode === 'COVALENT') {
+        let cx = width / 2, cy = constrain(height * 0.44, 100, 230);
+        origPositions = [
+            createVector(cx - width * 0.26, cy),
+            createVector(cx,                cy),
+            createVector(cx + width * 0.26, cy)
+        ];
+        if (covalentBonds.length === 0) {
+            for (let i = 0; i < atoms.length; i++) {
+                if (origPositions[i]) {
+                    atoms[i].pos.set(origPositions[i]);
+                    atoms[i].targetPos.set(origPositions[i]);
+                }
+            }
+        }
+    } else if (currentMode === 'METALLIC') {
+        // Preserve experiment state, reinit grid with new canvas dimensions
+        let ph = metallicPhase, dO = deformOffset, dT = deformTarget, dD = deformDone;
+        initMetallicSimulation();
+        metallicPhase = ph; deformOffset = dO; deformTarget = dT; deformDone = dD;
+    }
 }
 
 function handleModeChange() {
@@ -176,26 +224,6 @@ function handleModeChange() {
 // ============================================================
 // INICIALIZACIÓN
 // ============================================================
-const INFO_IONIC = `
-    <p><b>1.</b> Elige un <em>metal</em> y un <em>no metal</em> en las ranuras A / B / C.</p>
-    <p><b>2.</b> Pulsa <em>Ceder e⁻</em> para transferir electrones de valencia del metal al no metal.</p>
-    <p><b>3.</b> Cuando los iones tienen cargas opuestas y configuración de gas noble (<b>octeto</b> o <b>dueto</b>), la atracción de <b>Coulomb</b> forma el enlace.</p>
-    <p>Prueba con <b>NaCl</b>, <b>MgCl₂</b> o <b>Na₂O</b>.</p>
-`;
-const INFO_COVALENT = `
-    <p><b>1.</b> Elige dos <em>no metales</em> en las ranuras A y B (o A, B y C para moléculas triatómicas).</p>
-    <p><b>2.</b> Pulsa <em>Compartir</em> para que cada átomo aporte un electrón al par compartido.</p>
-    <p><b>3.</b> Las órbitas de la capa de valencia se solapan: el par de electrones compartido orbita dentro de la <b>zona de intersección</b> y cuenta para el octeto de ambos átomos.</p>
-    <p>Prueba con <b>H₂</b>, <b>Cl₂</b>, <b>O₂</b> (doble enlace) o <b>HCl</b>. Para <b>H₂O</b> usa las tres ranuras: A=H, B=O, C=H.</p>
-`;
-
-function updateModeInfo() {
-    let el = document.getElementById('mode-info');
-    if (!el) return;
-    if (currentMode === 'COVALENT') el.innerHTML = INFO_COVALENT;
-    else if (currentMode === 'IONIC') el.innerHTML = INFO_IONIC;
-    else el.innerHTML = '<p>Selecciona <em>Enlace Iónico</em> o <em>Enlace Covalente</em> para comenzar.</p>';
-}
 
 function togglePause() {
     let btn = document.getElementById('pause-btn');
@@ -244,15 +272,14 @@ function initSimulation() {
     ionicShearTarget    = 0;
     ionicShearAligned   = false;
     ionicGapOffset      = 0;
-    ionicVibTime        = 0;
-    ionicShowForces     = false;
-    ionicCrystalAtoms   = [];
-    elBtnCrystalView    = null;
+    ionicVibTime          = 0;
+    ionicShowForces       = false;
+    ionicCrystalAtoms     = [];
+    ionicCrystalRowArrays = [];
+    elBtnCrystalView      = null;
     elBtnIonicVoltage2  = null;
     elBtnIonicShear2    = null;
     elIonicCrystalInfo  = null;
-
-    updateModeInfo();
 
     let ctrlRow = select('#atom-controls-row');
     let showRow = currentMode === 'IONIC' || currentMode === 'COVALENT';
@@ -731,15 +758,18 @@ class Atom {
             let numE  = this.data.config[n];
             let speed = max(0.008, 0.022 - n * 0.005);
             for (let e = 0; e < numE; e++) {
+                const baseCol    = this.data.color;
+                const baseColObj = color(baseCol);
                 this.electrons.push({
-                    shell:      n,
-                    radius:     SHELL_RADII[n],
-                    angle:      map(e, 0, numE, 0, TWO_PI),
-                    speed:      speed,
-                    baseColor:  this.data.color,
-                    color:      this.data.color,
-                    shared:     false,
-                    sharedWith: null   // índice del otro átomo si está compartido
+                    shell:        n,
+                    radius:       SHELL_RADII[n],
+                    angle:        map(e, 0, numE, 0, TWO_PI),
+                    speed:        speed,
+                    baseColor:    baseCol,
+                    baseColorObj: baseColObj,
+                    color:        baseColObj, // always a p5.Color after first update
+                    shared:       false,
+                    sharedWith:   null
                 });
             }
         }
@@ -799,13 +829,13 @@ class Atom {
             e.angle += (currentMode === 'COVALENT' && e.shared) ? e.speed * 1.6 : e.speed;
             if (currentMode === 'COVALENT') {
                 // Electrón compartido: color neutro distinto de ambos átomos
-                e.color = e.shared ? '#E879F9' : e.baseColor;
+                e.color = e.shared ? _COVALENT_COLOR_OBJ : e.baseColorObj;
             } else {
                 if (bondFormed) {
                     let t   = min(bondProgress * 1.6, 1);
-                    e.color = lerpColor(color(e.baseColor), color(BOND_COLOR), t);
+                    e.color = lerpColor(e.baseColorObj, _BOND_COLOR_OBJ, t);
                 } else {
-                    e.color = e.baseColor;
+                    e.color = e.baseColorObj;
                 }
             }
         }
@@ -913,11 +943,11 @@ class Atom {
                 ex = this.pos.x + cos(e.angle) * e.radius;
                 ey = this.pos.y + sin(e.angle) * e.radius;
             }
-            let c = color(e.color);
+            // e.color is always a p5.Color (set in update())
             noStroke();
-            fill(red(c), green(c), blue(c), 55);
+            fill(red(e.color), green(e.color), blue(e.color), 55);
             circle(ex, ey, 18);
-            fill(c);
+            fill(e.color);
             circle(ex, ey, 9);
         }
     }
@@ -932,19 +962,18 @@ function drawEmptySlots() {
         if (a.symbol !== 'NONE') continue;
         let x = a.pos.x, y = a.pos.y;
         noFill();
-        stroke(59, 130, 246, 80);
+        stroke(59, 130, 246, 100);
         strokeWeight(1.5);
         drawingContext.setLineDash([6, 6]);
         ellipse(x, y, R * 2, R * 2);
         drawingContext.setLineDash([]);
         noStroke();
-        fill(30, 35, 60, 100);
+        fill(20, 28, 58, 160);
         circle(x, y, 44);
-        noStroke();
-        fill(59, 130, 246, 100);
+        fill(100, 160, 255, 210);
         textAlign(CENTER, CENTER);
-        textSize(20);
-        text('+', x, y);
+        textSize(22);
+        text('+', x, y - 1);
     }
 }
 
@@ -1278,7 +1307,7 @@ function drawBondEffect() {
 
     if (bondProgress > 0.75) {
         let a3 = map(bondProgress, 0.75, 1, 0, 255);
-        let bx = width / 2, by = height * 0.82;
+        let bx = width / 2, by = constrain(height * 0.82, height * 0.72, height - 38);
         noStroke();
         fill(16, 185, 129, a3 * 0.18);
         rect(bx - 180, by - 20, 360, 40, 10);
@@ -1320,19 +1349,30 @@ function drawComingSoon() {
 // TARJETA DE INFORMACIÓN POR MODO
 // ============================================================
 function updateModeInfoCard(mode) {
+    // Clear the legacy duplicate slot to prevent double content
+    let legacy = document.getElementById('mode-info');
+    if (legacy) legacy.innerHTML = '';
+
     let content = document.getElementById('mode-info-content');
     if (!content) return;
+
     if (mode === 'IONIC') {
         content.innerHTML = `
             <p><b>1.</b> Elige un <em>metal</em> y un <em>no metal</em> en las ranuras A / B / C.</p>
-            <p><b>2.</b> Pulsa <em>Ceder e⁻</em> para transferir electrones de valencia.</p>
+            <p><b>2.</b> Pulsa <em>Ceder e⁻</em> para transferir electrones de valencia del metal al no metal.</p>
             <p><b>3.</b> Cuando los iones tienen cargas opuestas y configuración de gas noble (<b>octeto</b> o <b>dueto</b>), la atracción de <b>Coulomb</b> forma el enlace.</p>
-            <p>Prueba con <b>MgCl₂</b>, <b>Na₂O</b> o <b>KF</b> usando las tres ranuras.</p>`;
+            <p>Prueba con <b>NaCl</b>, <b>MgCl₂</b> o <b>Na₂O</b>. Usa las tres ranuras para compuestos 1:2.</p>`;
     } else if (mode === 'METALLIC') {
         content.innerHTML = `
-            <p><b>1.</b> Los átomos metálicos <em>ceden</em> sus e⁻ de valencia a un <em>mar compartido</em>.</p>
-            <p><b>2.</b> La red de <b>cationes</b> y el <b>mar de e⁻</b> se atraen: eso <em>es</em> el enlace metálico.</p>
-            <p>Pulsa <em>Aplicar voltaje</em> para ver la <b>conductividad</b>, o <em>Deformar red</em> para la <b>maleabilidad</b>.</p>`;
+            <p><b>1.</b> Los átomos metálicos <em>ceden</em> sus e⁻ de valencia a un <em>mar de electrones</em> compartido.</p>
+            <p><b>2.</b> La red de <b>cationes</b> y el <b>mar de e⁻</b> se atraen electrostáticamente: eso <em>es</em> el enlace metálico.</p>
+            <p>Pulsa <em>Aplicar voltaje</em> para ver la <b>conductividad eléctrica</b>, o <em>Deformar red</em> para la <b>maleabilidad</b>.</p>`;
+    } else if (mode === 'COVALENT') {
+        content.innerHTML = `
+            <p><b>1.</b> Elige dos <em>no metales</em> en las ranuras A y B (o A, B y C para moléculas triatómicas).</p>
+            <p><b>2.</b> Pulsa <em>Compartir</em> para que cada átomo aporte un electrón al par compartido.</p>
+            <p><b>3.</b> Las órbitas se solapan: el par compartido orbita en la <b>zona de intersección</b> y cuenta para el octeto de ambos átomos.</p>
+            <p>Prueba con <b>H₂</b>, <b>Cl₂</b>, <b>O₂</b> o <b>HCl</b>. Para <b>H₂O</b> usa A=H, B=O, C=H.</p>`;
     } else {
         content.innerHTML = `<p>Selecciona un modo para comenzar.</p>`;
     }
@@ -1393,7 +1433,8 @@ function exitIonicCrystal() {
 }
 
 function initIonicCrystalGrid() {
-    ionicCrystalAtoms = [];
+    ionicCrystalAtoms     = [];
+    ionicCrystalRowArrays = [];
     const cols = ionicCrystalCols;
     const rows = ionicCrystalRows;
 
@@ -1406,22 +1447,51 @@ function initIonicCrystalGrid() {
     ionicCrystalStartX = width  / 2 - totalW / 2;
     ionicCrystalStartY = height / 2 - totalH / 2;
 
+    // Precompute text metrics for the draw loop (constant per spacing level)
+    const nucSize = max(ionicCrystalSpacing * 0.38, 24);
+    const symSz   = max(nucSize * 0.32, 10);
+    const supSz   = max(nucSize * 0.22, 7);
+    const supShY  = max(nucSize * 0.12, 4);
+
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
             let isCat  = (r + c) % 2 === 0;
             let sym    = isCat ? ionicCatSym    : ionicAnSym;
             let clr    = isCat ? ionicCatColor  : ionicAnColor;
             let charge = isCat ? ionicCatCharge : ionicAnCharge;
-            let bx = ionicCrystalStartX + c * ionicCrystalSpacing;
-            let by = ionicCrystalStartY + r * ionicCrystalSpacing;
+            let bx     = ionicCrystalStartX + c * ionicCrystalSpacing;
+            let by     = ionicCrystalStartY + r * ionicCrystalSpacing;
+
+            const sup  = charge > 0
+                ? (charge === 1 ? '+' : charge + '+')
+                : (Math.abs(charge) === 1 ? '−' : Math.abs(charge) + '−');
+
+            // Cache RGB to avoid color() constructor each frame
+            const col = color(clr);
+            const cR  = red(col), cG = green(col), cB = blue(col);
+
+            // Cache text widths (font must already be initialized)
+            textStyle(BOLD);
+            textSize(symSz); const symW = textWidth(sym);
+            textSize(supSz); const supW = textWidth(sup);
+            textStyle(NORMAL);
+
             ionicCrystalAtoms.push({
-                sym, color: clr, charge, isCat,
+                sym, sup, color: clr, r: cR, g: cG, b: cB, charge, isCat,
                 baseX: bx, baseY: by,
                 x: bx, y: by,
                 row: r, col: c,
                 vibPhase: random(TWO_PI),
+                // pre-baked draw constants
+                symW, supW, symSz, supSz, supShY,
+                nucSize,
             });
         }
+    }
+
+    // Cache slices by row for O(1) lookup in overlay code
+    for (let r = 0; r < rows; r++) {
+        ionicCrystalRowArrays[r] = ionicCrystalAtoms.filter(ion => ion.row === r);
     }
 }
 
@@ -1641,13 +1711,10 @@ function drawIonicCoulombLines() {
 }
 
 function drawIonicCrystalGrid() {
-    const nucSize = max(ionicCrystalSpacing * 0.38, 24);
+    textStyle(BOLD);
+    textAlign(LEFT, CENTER);
     for (let ion of ionicCrystalAtoms) {
-        const c  = color(ion.color);
-        const cR = red(c), cG = green(c), cB = blue(c);
-        const sup = ion.charge > 0
-            ? (ion.charge === 1 ? '+' : ion.charge + '+')
-            : (Math.abs(ion.charge) === 1 ? '−' : Math.abs(ion.charge) + '−');
+        const { r: cR, g: cG, b: cB, nucSize, symSz, supSz, supShY, symW, supW } = ion;
 
         noStroke();
         fill(cR, cG, cB, 18);
@@ -1656,22 +1723,14 @@ function drawIonicCrystalGrid() {
         circle(ion.x, ion.y, nucSize);
 
         fill('#0F172A');
-        textStyle(BOLD);
-        let symSz = max(nucSize * 0.32, 10);
-        let supSz = max(nucSize * 0.22, 7);
-        textSize(symSz);
-        textAlign(LEFT, CENTER);
-        let symW = textWidth(ion.sym);
-        textSize(supSz);
-        let supW = textWidth(sup);
-        let tX   = ion.x - (symW + supW + 1) / 2;
+        const tX = ion.x - (symW + supW + 1) / 2;
         textSize(symSz);
         text(ion.sym, tX, ion.y);
         textSize(supSz);
-        text(sup, tX + symW + 1, ion.y - max(nucSize * 0.12, 4));
-        textStyle(NORMAL);
-        textAlign(CENTER, CENTER);
+        text(ion.sup, tX + symW + 1, ion.y - supShY);
     }
+    textStyle(NORMAL);
+    textAlign(CENTER, CENTER);
 }
 
 function drawIonicCrystalOverlay() {
@@ -1702,15 +1761,17 @@ function drawIonicVoltageOverlay() {
     textSize(11);
     text('⊘  Los iones no se desplazan', width / 2, topY - 6);
 
+    let msgY1 = min(botY + 22, height - 28);
+    let msgY2 = min(botY + 40, height - 10);
     fill(239, 68, 68, 210);
     textAlign(CENTER, CENTER);
     textSize(14);
     textStyle(BOLD);
-    text('No conduce en sólido — iones fijos en la red', width / 2, botY + 22);
+    text('No conduce en sólido — iones fijos en la red', width / 2, msgY1);
     textStyle(NORMAL);
     fill('#475569');
     textSize(11);
-    text('(conduciría fundido o en disolución acuosa)', width / 2, botY + 40);
+    text('(conduciría fundido o en disolución acuosa)', width / 2, msgY2);
 }
 
 function drawIonicShearOverlay() {
@@ -1746,8 +1807,8 @@ function drawIonicShearOverlay() {
         drawingContext.setLineDash([]);
     } else {
         // Indicadores de repulsión entre iones de igual carga enfrentados
-        let row1Ions = ionicCrystalAtoms.filter(ion => ion.row === 1);
-        let row2Ions = ionicCrystalAtoms.filter(ion => ion.row === 2);
+        const row1Ions = ionicCrystalRowArrays[1] || [];
+        const row2Ions = ionicCrystalRowArrays[2] || [];
         for (let r1 of row1Ions) {
             let closest = null, closestDist = Infinity;
             for (let r2 of row2Ions) {
@@ -1772,21 +1833,24 @@ function drawIonicShearOverlay() {
                 text('✕', mx, my);
             }
         }
+        textStyle(NORMAL);
 
         // Mensaje de fractura
         noStroke();
         let alpha = constrain(ionicGapOffset * 4, 0, 220);
+        let msgY1 = min(botY + 22, height - 28);
+        let msgY2 = min(botY + 40, height - 10);
         if (ionicGapOffset > ionicCrystalSpacing * 0.4) {
             fill(239, 68, 68, alpha);
             textAlign(CENTER, CENTER); textSize(14); textStyle(BOLD);
-            text('¡Fractura! — el cristal iónico es frágil', width / 2, botY + 22);
+            text('¡Fractura! — el cristal iónico es frágil', width / 2, msgY1);
             textStyle(NORMAL);
             fill('#475569'); textSize(11);
-            text('(contraste: el metal se deforma — su mar de e⁻ no tiene planos de carga fija)', width / 2, botY + 40);
+            text('(contraste: el metal se deforma — su mar de e⁻ no tiene planos de carga fija)', width / 2, msgY2);
         } else {
             fill(239, 68, 68, alpha + 60);
             textAlign(CENTER, CENTER); textSize(13); textStyle(BOLD);
-            text('Cargas iguales enfrentadas → repulsión → fractura', width / 2, botY + 22);
+            text('Cargas iguales enfrentadas → repulsión → fractura', width / 2, msgY1);
         }
         textStyle(NORMAL);
     }
@@ -1860,11 +1924,7 @@ function drawIonicForceDiagram() {
     drawingContext.setLineDash([]);
 
     // ── Leyenda compacta (esquina inferior derecha del canvas) ────────────────
-    let lItems = [
-        { col: [52, 211, 153], lbl: 'atracción' },
-        { col: [239, 68, 68],  lbl: 'repulsión'  },
-        { col: [251, 191, 36], lbl: 'resultante' },
-    ];
+    const lItems = _FORCE_LEGEND;
     let lW = 152, lH = lItems.length * 16 + 10;
     let lX = width  - lW - 14;
     let lY = height - lH - 14;
@@ -1885,6 +1945,12 @@ function drawIonicForceDiagram() {
         text(it.lbl, lX + 24, y);
     }
 }
+
+const _FORCE_LEGEND = [
+    { col: [52, 211, 153], lbl: 'atracción' },
+    { col: [239, 68, 68],  lbl: 'repulsión'  },
+    { col: [251, 191, 36], lbl: 'resultante' },
+];
 
 function _iArrow(x1, y1, x2, y2, col, alpha, sw, hs) {
     let dx = x2 - x1, dy = y2 - y1, d = sqrt(dx * dx + dy * dy);
@@ -2243,7 +2309,7 @@ function drawVoltageOverlay() {
     textAlign(CENTER, CENTER);
     textSize(14);
     textStyle(BOLD);
-    text('⚡ Conductividad eléctrica', width / 2, botY + 22);
+    text('⚡ Conductividad eléctrica', width / 2, min(botY + 22, height - 14));
     textStyle(NORMAL);
 }
 
@@ -2287,7 +2353,7 @@ function drawDeformOverlay() {
         textAlign(CENTER, CENTER);
         textSize(14);
         textStyle(BOLD);
-        text('El enlace no se rompe — maleabilidad', width / 2, botY + 22);
+        text('El enlace no se rompe — maleabilidad', width / 2, min(botY + 22, height - 14));
         textStyle(NORMAL);
     }
 }
