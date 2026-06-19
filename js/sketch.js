@@ -88,6 +88,7 @@ function draw() {
     } else if (currentMode === 'COVALENT') {
         updateBondAnim();
         for (let a of atoms) { a.update(); a.draw(); }
+        drawCovalentLenses();
         drawEmptySlots();
         drawCovalentLabels();
         if (bondFormed) drawBondEffect();
@@ -124,7 +125,7 @@ const INFO_IONIC = `
 const INFO_COVALENT = `
     <p><b>1.</b> Elige dos <em>no metales</em> en las ranuras A y B (o A, B y C para moléculas triatómicas).</p>
     <p><b>2.</b> Pulsa <em>Compartir</em> para que cada átomo aporte un electrón al par compartido.</p>
-    <p><b>3.</b> El par de electrones compartido orbita en una <b>lemniscata</b> (∞) entre ambos núcleos y cuenta para el octeto de los dos átomos.</p>
+    <p><b>3.</b> Las órbitas de la capa de valencia se solapan: el par de electrones compartido orbita dentro de la <b>zona de intersección</b> y cuenta para el octeto de ambos átomos.</p>
     <p>Prueba con <b>H₂</b>, <b>Cl₂</b>, <b>O₂</b> (doble enlace) o <b>HCl</b>. Para <b>H₂O</b> usa las tres ranuras: A=H, B=O, C=H.</p>
 `;
 
@@ -389,10 +390,28 @@ function shareElectron(idxA, idxB) {
     if (!eA || !eB) return; // alguno no tiene electrones libres para compartir
 
     eA.shared = true;  eA.sharedWith = idxB;
-    eA.angle  = 0;                  // empieza en el átomo A
+    eA.angle  = 0;
     eB.shared = true;  eB.sharedWith = idxA;
-    eB.angle  = PI;                 // desfasado media vuelta — ocupa el lado del átomo B
+    eB.angle  = PI;
     covalentBonds.push({ atomA: idxA, atomB: idxB, eA, eB });
+
+    // Acercar los átomos hasta que sus capas de valencia se solapen.
+    // El átomo 1 (centro) es el ancla; los exteriores (0 y 2) se mueven hacia él.
+    let outerIdx = (idxA === 1) ? idxB : idxA;
+    let innerIdx = (idxA === 1) ? idxA : idxB;
+    let rOuter   = SHELL_RADII[atoms[outerIdx].nativeMaxShell()];
+    let rInner   = SHELL_RADII[atoms[innerIdx].nativeMaxShell()];
+    let dTarget  = (rOuter + rInner) * 0.75;
+    let ddx = atoms[outerIdx].pos.x - atoms[innerIdx].pos.x;
+    let ddy = atoms[outerIdx].pos.y - atoms[innerIdx].pos.y;
+    let dist = Math.sqrt(ddx * ddx + ddy * ddy);
+    if (dist > 0) {
+        let nx = ddx / dist, ny = ddy / dist;
+        atoms[outerIdx].targetPos = createVector(
+            atoms[innerIdx].pos.x + nx * dTarget,
+            atoms[innerIdx].pos.y + ny * dTarget
+        );
+    }
 
     updateUIState();
     checkCovalentBondFormed();
@@ -431,6 +450,52 @@ function checkCovalentBondFormed() {
             <div class="compound-formula">${getCompoundName()}</div>
             <div class="result-detail">Enlace covalente · Par de electrones compartido</div>
         `);
+    }
+}
+
+// ============================================================
+// ZONA DE INTERSECCIÓN (lenteja covalente)
+// ============================================================
+function drawCovalentLenses() {
+    for (let bond of covalentBonds) {
+        let atomA = atoms[bond.atomA];
+        let atomB = atoms[bond.atomB];
+        if (!atomA || !atomB || atomA.symbol === 'NONE' || atomB.symbol === 'NONE') continue;
+
+        let ax  = atomA.pos.x, ay = atomA.pos.y;
+        let bx  = atomB.pos.x, by = atomB.pos.y;
+        let ddx = bx - ax, ddy = by - ay;
+        let d   = sqrt(ddx * ddx + ddy * ddy);
+        if (d < 1) continue;
+
+        let ang  = atan2(ddy, ddx);
+        let rA   = SHELL_RADII[atomA.nativeMaxShell()];
+        let rB   = SHELL_RADII[atomB.nativeMaxShell()];
+        let xc   = (d * d + rA * rA - rB * rB) / (2 * d);
+        let hSq  = rA * rA - xc * xc;
+        let aMax = min(rA - xc, rB - (d - xc));
+        if (hSq <= 0 || aMax <= 1) continue;
+
+        let h    = sqrt(hSq);
+        let semi = aMax * 0.85;
+
+        // Centro de la elipse en coordenadas globales
+        let cx = ax + xc * cos(ang);
+        let cy = ay + xc * sin(ang);
+
+        push();
+        translate(cx, cy);
+        rotate(ang);
+        // Relleno muy tenue
+        noStroke();
+        fill(232, 121, 249, 22);
+        ellipse(0, 0, semi * 2, h * 2);
+        // Borde sutil
+        noFill();
+        stroke(232, 121, 249, 55);
+        strokeWeight(1);
+        ellipse(0, 0, semi * 2, h * 2);
+        pop();
     }
 }
 
@@ -631,22 +696,38 @@ class Atom {
         for (let e of this.electrons) {
             let ex, ey;
             if (currentMode === 'COVALENT' && e.shared) {
-                // Trayectoria lemniscata entre este átomo y su compañero
+                // Elipse dentro de la zona de intersección de las dos capas de valencia
                 let partner = atoms[e.sharedWith];
                 if (partner && partner.symbol !== 'NONE') {
-                    let mx  = (this.pos.x + partner.pos.x) / 2;
-                    let my  = (this.pos.y + partner.pos.y) / 2;
-                    let dx  = partner.pos.x - this.pos.x;
-                    let dy  = partner.pos.y - this.pos.y;
-                    let ang = atan2(dy, dx);
-                    let d   = sqrt(dx * dx + dy * dy) / 2;
-                    let t   = e.angle;
-                    let denom = 1 + sin(t) * sin(t);
-                    let lx  = d * cos(t) / denom;
-                    let ly  = d * cos(t) * sin(t) / denom;
-                    // Rotar al ángulo del eje A-B
-                    ex = mx + lx * cos(ang) - ly * sin(ang);
-                    ey = my + lx * sin(ang) + ly * cos(ang);
+                    let ax  = this.pos.x, ay = this.pos.y;
+                    let ddx = partner.pos.x - ax, ddy = partner.pos.y - ay;
+                    let d   = sqrt(ddx * ddx + ddy * ddy);
+                    if (d > 1) {
+                        let ang  = atan2(ddy, ddx);
+                        let rA   = SHELL_RADII[this.nativeMaxShell()];
+                        let rB   = SHELL_RADII[partner.nativeMaxShell()];
+                        // Centro de la intersección desde este átomo (coord. local)
+                        let xc   = (d * d + rA * rA - rB * rB) / (2 * d);
+                        // Semi-eje perpendicular al enlace (semidistancia de cuerda)
+                        let hSq  = rA * rA - xc * xc;
+                        // Semi-eje paralelo al enlace (confinado dentro de ambas circunferencias)
+                        let aMax = min(rA - xc, rB - (d - xc));
+                        if (hSq > 0 && aMax > 1) {
+                            let h    = sqrt(hSq);
+                            let semi = aMax * 0.85;
+                            let lx   = xc + semi * cos(e.angle);
+                            let ly   = h   * sin(e.angle);
+                            ex = ax + lx * cos(ang) - ly * sin(ang);
+                            ey = ay + lx * sin(ang) + ly * cos(ang);
+                        } else {
+                            // Átomos aún no lo suficientemente cerca: órbita circular normal
+                            ex = ax + cos(e.angle) * e.radius;
+                            ey = ay + sin(e.angle) * e.radius;
+                        }
+                    } else {
+                        ex = this.pos.x + cos(e.angle) * e.radius;
+                        ey = this.pos.y + sin(e.angle) * e.radius;
+                    }
                 } else {
                     ex = this.pos.x + cos(e.angle) * e.radius;
                     ey = this.pos.y + sin(e.angle) * e.radius;
