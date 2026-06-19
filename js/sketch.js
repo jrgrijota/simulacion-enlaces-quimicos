@@ -362,7 +362,9 @@ function shareElectron(idxA, idxB) {
     if (!eA || !eB) return; // alguno no tiene electrones libres para compartir
 
     eA.shared = true;  eA.sharedWith = idxB;
+    eA.angle  = 0;                  // empieza en el átomo A
     eB.shared = true;  eB.sharedWith = idxA;
+    eB.angle  = PI;                 // desfasado media vuelta — ocupa el lado del átomo B
     covalentBonds.push({ atomA: idxA, atomB: idxB, eA, eB });
 
     updateUIState();
@@ -528,7 +530,8 @@ class Atom {
         this.pos.x = lerp(this.pos.x, this.targetPos.x, 0.05);
         this.pos.y = lerp(this.pos.y, this.targetPos.y, 0.05);
         for (let e of this.electrons) {
-            e.angle += e.speed;
+            // Electrones compartidos recorren la lemniscata algo más rápido
+            e.angle += (currentMode === 'COVALENT' && e.shared) ? e.speed * 1.6 : e.speed;
             if (currentMode === 'COVALENT') {
                 // Electrón compartido: color neutro distinto de ambos átomos
                 e.color = e.shared ? '#E879F9' : e.baseColor;
@@ -599,9 +602,33 @@ class Atom {
 
         // Electrons
         for (let e of this.electrons) {
-            let ex = this.pos.x + cos(e.angle) * e.radius;
-            let ey = this.pos.y + sin(e.angle) * e.radius;
-            let c  = color(e.color);
+            let ex, ey;
+            if (currentMode === 'COVALENT' && e.shared) {
+                // Trayectoria lemniscata entre este átomo y su compañero
+                let partner = atoms[e.sharedWith];
+                if (partner && partner.symbol !== 'NONE') {
+                    let mx  = (this.pos.x + partner.pos.x) / 2;
+                    let my  = (this.pos.y + partner.pos.y) / 2;
+                    let dx  = partner.pos.x - this.pos.x;
+                    let dy  = partner.pos.y - this.pos.y;
+                    let ang = atan2(dy, dx);
+                    let d   = sqrt(dx * dx + dy * dy) / 2;
+                    let t   = e.angle;
+                    let denom = 1 + sin(t) * sin(t);
+                    let lx  = d * cos(t) / denom;
+                    let ly  = d * cos(t) * sin(t) / denom;
+                    // Rotar al ángulo del eje A-B
+                    ex = mx + lx * cos(ang) - ly * sin(ang);
+                    ey = my + lx * sin(ang) + ly * cos(ang);
+                } else {
+                    ex = this.pos.x + cos(e.angle) * e.radius;
+                    ey = this.pos.y + sin(e.angle) * e.radius;
+                }
+            } else {
+                ex = this.pos.x + cos(e.angle) * e.radius;
+                ey = this.pos.y + sin(e.angle) * e.radius;
+            }
+            let c = color(e.color);
             noStroke();
             fill(red(c), green(c), blue(c), 55);
             circle(ex, ey, 18);
