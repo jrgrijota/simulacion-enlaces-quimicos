@@ -247,6 +247,12 @@ button:disabled { opacity: 0.28; cursor: not-allowed; }
 .check-pass { color: var(--success); font-weight: 600; }
 .check-fail { color: var(--danger); }
 
+
+/* ─── MODE CARD (selector always visible) ────── */
+.mode-card {
+    padding: 10px var(--card-pad);
+}
+
 /* ─── INFO SECTION ────────────────────────────── */
 .info-section p {
     font-size: var(--fs-hint);

@@ -2,9 +2,11 @@
 // DATOS QUÍMICOS
 // ============================================================
 const SHELL_RADII = [36, 60, 84, 108];
-const BOND_COLOR  = '#F59E0B';
-let   _BOND_COLOR_OBJ     = null; // initialized in setup() once p5 is ready
-let   _COVALENT_COLOR_OBJ = null;
+const BOND_COLOR             = '#F59E0B';
+const TRANSFERRED_ELEC_COLOR = '#94A3B8';
+let   _BOND_COLOR_OBJ        = null; // initialized in setup() once p5 is ready
+let   _COVALENT_COLOR_OBJ    = null;
+let   _TRANSFERRED_COLOR_OBJ = null;
 
 // ============================================================
 // DATOS PARA ENLACE METÁLICO
@@ -68,7 +70,7 @@ let elMetallicInfo = null;
 let ionicCrystalMode      = false;
 let ionicCrystalPhase     = 'normal'; // 'normal' | 'voltage' | 'shear'
 let ionicCrystalCols      = 7;
-let ionicCrystalRows      = 5;
+let ionicCrystalRows      = 4;
 let ionicCrystalSpacing   = 72;
 let ionicCrystalStartX    = 0;
 let ionicCrystalStartY    = 0;
@@ -85,10 +87,18 @@ let ionicShearTarget    = 0;
 let ionicShearAligned   = false;
 let ionicGapOffset      = 0;
 let ionicVibTime        = 0;
-let ionicShowForces     = false;
+let ionicShowShearForces  = false;
+let ionicShowElectrons    = false;
+let ionicCatElecConfig    = []; // [{shell, transferred}] snapshot at crystal entry
+let ionicAnElecConfig     = [];
+let _crystalBtnBounds      = null; // set each frame when the canvas button is visible
+let _crystalBackBtnBounds  = null;
+let _crystalPauseBtnBounds = null;
 let elBtnCrystalView    = null;
 let elBtnIonicVoltage2  = null;
 let elBtnIonicShear2    = null;
+let elSliderShear       = null;
+let elSliderShearLabel  = null;
 let elIonicCrystalInfo  = null;
 
 // ============================================================
@@ -129,8 +139,9 @@ function setup() {
     let cnv  = createCanvas(cont.offsetWidth, cont.offsetHeight);
     cnv.parent('sim-frame');
     frameRate(60);
-    _BOND_COLOR_OBJ     = color(BOND_COLOR);
-    _COVALENT_COLOR_OBJ = color('#E879F9');
+    _BOND_COLOR_OBJ        = color(BOND_COLOR);
+    _COVALENT_COLOR_OBJ    = color('#E879F9');
+    _TRANSFERRED_COLOR_OBJ = color(TRANSFERRED_ELEC_COLOR);
     uiContainer = select('#ui-overlay');
     select('#mode-select').changed(handleModeChange);
     initSimulation();
@@ -273,13 +284,21 @@ function initSimulation() {
     ionicShearAligned   = false;
     ionicGapOffset      = 0;
     ionicVibTime          = 0;
-    ionicShowForces       = false;
-    ionicCrystalAtoms     = [];
-    ionicCrystalRowArrays = [];
-    elBtnCrystalView      = null;
-    elBtnIonicVoltage2  = null;
-    elBtnIonicShear2    = null;
-    elIonicCrystalInfo  = null;
+
+    ionicShowShearForces   = false;
+    ionicShowElectrons     = false;
+    ionicCatElecConfig     = [];
+    ionicAnElecConfig      = [];
+    ionicCrystalAtoms      = [];
+    ionicCrystalRowArrays  = [];
+    _crystalBackBtnBounds  = null;
+    _crystalPauseBtnBounds = null;
+    elBtnCrystalView       = null;
+    elBtnIonicVoltage2     = null;
+    elBtnIonicShear2       = null;
+    elSliderShear          = null;
+    elSliderShearLabel     = null;
+    elIonicCrystalInfo     = null;
 
     let ctrlRow = select('#atom-controls-row');
     let showRow = currentMode === 'IONIC' || currentMode === 'COVALENT';
@@ -335,11 +354,9 @@ function resetSimulation() {
     bondFormed   = false;
     bondProgress = 0;
     resetAtomPositions();
-    atoms[0].setElement('Na');
-    atoms[1].setElement('Cl');
-    atoms[2].setElement('NONE');
-    for (let i = 0; i < 3; i++) {
-        if (atomSelects[i]) atomSelects[i].value(atoms[i].symbol);
+    for (let i = 0; i < atoms.length; i++) {
+        atoms[i].buildElectrons();
+        atoms[i].calcCharge();
     }
     if (elResultCard) elResultCard.style('display', 'none');
     updateUIState();
@@ -379,6 +396,8 @@ function buildIonicUI() {
     elResultCard.child(elResultBody);
     uiContainer.child(elResultCard);
 
+    // El botón "Ver red cristalina" se dibuja en el canvas (ver drawBondEffect)
+
     // ── Columnas de control bajo el canvas ──
     const labels = ['Átomo A', 'Átomo B', 'Átomo C'];
     for (let i = 0; i < 3; i++) {
@@ -413,18 +432,18 @@ function buildIonicUI() {
 
         let btnBox = createDiv().class('btn-group');
         if (i === 0) {
-            let b = createButton('e⁻ → B').id('btn-0r');
+            let b = createButton('Cede un electrón a B').id('btn-0r');
             b.mousePressed(() => transferElectron(0, 1));
             btnBox.child(b);
         } else if (i === 1) {
-            let bL = createButton('← A').id('btn-1l');
+            let bL = createButton('Cede un electrón a A').id('btn-1l');
             bL.mousePressed(() => transferElectron(1, 0));
-            let bR = createButton('C →').id('btn-1r');
+            let bR = createButton('Cede un electrón a C').id('btn-1r');
             bR.mousePressed(() => transferElectron(1, 2));
             btnBox.child(bL);
             btnBox.child(bR);
         } else {
-            let b = createButton('B ← e⁻').id('btn-2l');
+            let b = createButton('Cede un electrón a B').id('btn-2l');
             b.mousePressed(() => transferElectron(2, 1));
             btnBox.child(b);
         }
@@ -521,6 +540,22 @@ function buildCovalentUI() {
 // ============================================================
 // LÓGICA ENLACE COVALENTE
 // ============================================================
+
+// Returns the covalent bond distance between two atoms such that their
+// valence shells overlap but neither valence shell reaches the inner shell of the other.
+function covalentBondDist(idxA, idxB) {
+    let a   = atoms[idxA], b   = atoms[idxB];
+    let msA = a.nativeMaxShell(), msB = b.nativeMaxShell();
+    let rA  = SHELL_RADII[msA],   rB  = SHELL_RADII[msB];
+    let dBase = (rA + rB) * 0.75;
+    // Enforce: valence of A must not reach inner shell of B (and vice versa)
+    let dMin = max(
+        msB > 0 ? rA + SHELL_RADII[msB - 1] + 2 : 0,
+        msA > 0 ? rB + SHELL_RADII[msA - 1] + 2 : 0
+    );
+    return max(dBase, dMin);
+}
+
 function shareElectron(idxA, idxB) {
     let atomA = atoms[idxA], atomB = atoms[idxB];
     if (atomA.symbol === 'NONE' || atomB.symbol === 'NONE') return;
@@ -534,18 +569,20 @@ function shareElectron(idxA, idxB) {
     if (!eA || !eB) return; // alguno no tiene electrones libres para compartir
 
     eA.shared = true;  eA.sharedWith = idxB;
-    eA.angle  = 0;
+    eA.angle  = random(TWO_PI);
     eB.shared = true;  eB.sharedWith = idxA;
-    eB.angle  = PI;
+    eB.angle  = eA.angle + PI;
+    // Equalize orbital speed so both electrons stay π apart as they orbit the lens
+    const sharedSpeed = (eA.speed + eB.speed) * 0.5;
+    eA._origSpeed = eA.speed;  eA.speed = sharedSpeed;
+    eB._origSpeed = eB.speed;  eB.speed = sharedSpeed;
     covalentBonds.push({ atomA: idxA, atomB: idxB, eA, eB });
 
     // Acercar los átomos hasta que sus capas de valencia se solapen.
     // El átomo 1 (centro) es el ancla; los exteriores (0 y 2) se mueven hacia él.
     let outerIdx = (idxA === 1) ? idxB : idxA;
     let innerIdx = (idxA === 1) ? idxA : idxB;
-    let rOuter   = SHELL_RADII[atoms[outerIdx].nativeMaxShell()];
-    let rInner   = SHELL_RADII[atoms[innerIdx].nativeMaxShell()];
-    let dTarget  = (rOuter + rInner) * 0.75;
+    let dTarget  = covalentBondDist(outerIdx, innerIdx);
     let ddx = atoms[outerIdx].pos.x - atoms[innerIdx].pos.x;
     let ddy = atoms[outerIdx].pos.y - atoms[innerIdx].pos.y;
     let dist = Math.sqrt(ddx * ddx + ddy * ddy);
@@ -572,9 +609,11 @@ function unshareElectron(idxA, idxB) {
     bond.eA.shared     = false;
     bond.eA.sharedWith = undefined;
     bond.eA.color      = bond.eA.baseColor;
+    if (bond.eA._origSpeed !== undefined) { bond.eA.speed = bond.eA._origSpeed; delete bond.eA._origSpeed; }
     bond.eB.shared     = false;
     bond.eB.sharedWith = undefined;
     bond.eB.color      = bond.eB.baseColor;
+    if (bond.eB._origSpeed !== undefined) { bond.eB.speed = bond.eB._origSpeed; delete bond.eB._origSpeed; }
     covalentBonds.splice(bondIdx, 1);
 
     bondFormed   = false;
@@ -626,18 +665,13 @@ function checkCovalentBondFormed() {
     // (radio_A + radio_B) × 0.75 para que la lenteja siga siendo visible.
     if (n === 2) {
         let i0 = activeIdx[0], i1 = activeIdx[1];
-        let r0 = SHELL_RADII[atoms[i0].nativeMaxShell()];
-        let r1 = SHELL_RADII[atoms[i1].nativeMaxShell()];
-        let d  = (r0 + r1) * 0.75;
+        let d  = covalentBondDist(i0, i1);
         atoms[i0].targetPos = createVector(cx - d / 2, cy);
         atoms[i1].targetPos = createVector(cx + d / 2, cy);
     } else if (n === 3) {
         let i0 = activeIdx[0], i1 = activeIdx[1], i2 = activeIdx[2];
-        let r0 = SHELL_RADII[atoms[i0].nativeMaxShell()];
-        let r1 = SHELL_RADII[atoms[i1].nativeMaxShell()];
-        let r2 = SHELL_RADII[atoms[i2].nativeMaxShell()];
-        let d01 = (r0 + r1) * 0.75;
-        let d12 = (r1 + r2) * 0.75;
+        let d01 = covalentBondDist(i0, i1);
+        let d12 = covalentBondDist(i1, i2);
         // Átomo central en cx; izquierda a -d01, derecha a +d12
         atoms[i0].targetPos = createVector(cx - d01, cy);
         atoms[i1].targetPos = createVector(cx,       cy);
@@ -832,8 +866,9 @@ class Atom {
                 e.color = e.shared ? _COVALENT_COLOR_OBJ : e.baseColorObj;
             } else {
                 if (bondFormed) {
-                    let t   = min(bondProgress * 1.6, 1);
-                    e.color = lerpColor(e.baseColorObj, _BOND_COLOR_OBJ, t);
+                    let t      = min(bondProgress * 1.6, 1);
+                    let target = e.transferred ? _TRANSFERRED_COLOR_OBJ : _BOND_COLOR_OBJ;
+                    e.color    = lerpColor(e.baseColorObj, target, t);
                 } else {
                     e.color = e.baseColorObj;
                 }
@@ -844,15 +879,52 @@ class Atom {
     draw() {
         if (this.symbol === 'NONE') return;
 
-        // Always draw all native shells (even if empty after electron transfer)
         let maxShell = this.nativeMaxShell();
 
         noFill();
         strokeWeight(1);
+
+        // In covalent mode, inner shells are clipped to this atom's side of each bond
+        let _bondedPartners = [];
+        if (currentMode === 'COVALENT') {
+            for (let b of covalentBonds) {
+                let pIdx = b.atomA === this.index ? b.atomB :
+                           b.atomB === this.index ? b.atomA : -1;
+                if (pIdx >= 0 && atoms[pIdx] && atoms[pIdx].symbol !== 'NONE') {
+                    _bondedPartners.push(atoms[pIdx]);
+                }
+            }
+        }
+
         for (let s = 0; s <= maxShell; s++) {
+            // Ocultar la capa más externa si no le quedan electrones (cedidos)
+            if (s === maxShell && !this.electrons.some(e => e.shell === s)) continue;
             stroke(71, 85, 105);
             drawingContext.setLineDash([4, 5]);
-            ellipse(this.pos.x, this.pos.y, SHELL_RADII[s] * 2, SHELL_RADII[s] * 2);
+
+            if (s < maxShell && _bondedPartners.length > 0) {
+                // Inner shell: clip to this atom's half-plane for each bonded partner
+                drawingContext.save();
+                for (let partner of _bondedPartners) {
+                    let mx  = (this.pos.x + partner.pos.x) * 0.5;
+                    let my  = (this.pos.y + partner.pos.y) * 0.5;
+                    let ang = atan2(partner.pos.y - this.pos.y, partner.pos.x - this.pos.x);
+                    let perp = ang + HALF_PI;
+                    const R  = 2000;
+                    let cA = cos(ang), sA = sin(ang), cP = cos(perp), sP = sin(perp);
+                    drawingContext.beginPath();
+                    drawingContext.moveTo(mx + cP * R,            my + sP * R);
+                    drawingContext.lineTo(mx - cP * R,            my - sP * R);
+                    drawingContext.lineTo(mx - cP * R - cA * R,   my - sP * R - sA * R);
+                    drawingContext.lineTo(mx + cP * R - cA * R,   my + sP * R - sA * R);
+                    drawingContext.closePath();
+                    drawingContext.clip();
+                }
+                ellipse(this.pos.x, this.pos.y, SHELL_RADII[s] * 2, SHELL_RADII[s] * 2);
+                drawingContext.restore();
+            } else {
+                ellipse(this.pos.x, this.pos.y, SHELL_RADII[s] * 2, SHELL_RADII[s] * 2);
+            }
         }
         drawingContext.setLineDash([]);
 
@@ -886,9 +958,7 @@ class Atom {
             textAlign(LEFT, CENTER);
             text(this.symbol, startX, this.pos.y);
 
-            // Charge color for superscript
-            let qCol = this.netCharge > 0 ? color('#EF4444') : color('#38BDF8');
-            fill(red(qCol), green(qCol), blue(qCol));
+            fill('#0F172A');
             textSize(8);
             text(qSup, startX + symW + 1, this.pos.y - 5);
         }
@@ -1027,10 +1097,11 @@ function transferElectron(fromIdx, toIdx) {
 
     let el      = from.electrons.splice(eIdx, 1)[0];
     let toShell = to.electrons.length > 0 ? to.valenceShell() : 0;
-    el.shell    = toShell;
-    el.radius   = SHELL_RADII[toShell];
-    el.angle    = random(TWO_PI);
-    el.speed    = max(0.008, 0.022 - toShell * 0.005);
+    el.shell       = toShell;
+    el.radius      = SHELL_RADII[toShell];
+    el.angle       = random(TWO_PI);
+    el.speed       = max(0.008, 0.022 - toShell * 0.005);
+    el.transferred = true;
     to.electrons.push(el);
 
     from.calcCharge();
@@ -1076,13 +1147,7 @@ function checkBondFormed() {
             <div class="result-detail">Enlace iónico · Atracción de Coulomb</div>
             <div class="result-ions">${ionParts.join(' &nbsp;+&nbsp; ')}</div>
         `);
-        if (!elBtnCrystalView) {
-            elBtnCrystalView = createButton('Ver red cristalina →');
-            elBtnCrystalView.class('btn-primary');
-            elBtnCrystalView.style('width', '100%').style('margin-top', '8px');
-            elBtnCrystalView.mousePressed(enterIonicCrystal);
-            elResultBody.child(elBtnCrystalView);
-        }
+        // El botón se dibuja en el canvas; _crystalBtnBounds se actualiza en drawBondEffect
     }
 }
 
@@ -1318,6 +1383,59 @@ function drawBondEffect() {
         let msg = currentMode === 'COVALENT' ? '¡Enlace covalente formado!' : '¡Enlace iónico formado!';
         text(msg, bx, by);
         textStyle(NORMAL);
+
+        // Botón "Ver red cristalina" — dibujado en canvas, solo en modo iónico
+        if (currentMode === 'IONIC' && bondProgress >= 0.98) {
+            const bW = 214, bH = 38;
+            const bBx = bx - bW / 2;
+            const bBy = constrain(by + 30, by + 30, height - bH - 10);
+            const hover = mouseX >= bBx && mouseX <= bBx + bW &&
+                          mouseY >= bBy && mouseY <= bBy + bH;
+            noStroke();
+            fill(16, 185, 129, hover ? 52 : 20);
+            rect(bBx, bBy, bW, bH, 99);
+            stroke(16, 185, 129, hover ? 230 : 120);
+            strokeWeight(1.5);
+            noFill();
+            rect(bBx, bBy, bW, bH, 99);
+            drawingContext.setLineDash([]);
+            noStroke();
+            fill(hover ? 236 : 16, hover ? 253 : 185, hover ? 245 : 129);
+            textSize(12);
+            textStyle(BOLD);
+            text('Ver red cristalina →', bx, bBy + bH / 2);
+            textStyle(NORMAL);
+            _crystalBtnBounds = { x: bBx, y: bBy, w: bW, h: bH };
+        } else {
+            _crystalBtnBounds = null;
+        }
+    } else {
+        _crystalBtnBounds = null;
+    }
+}
+
+function mouseClicked() {
+    if (ionicCrystalMode) {
+        if (_crystalBackBtnBounds) {
+            let r = _crystalBackBtnBounds;
+            if (mouseX >= r.x && mouseX <= r.x + r.w && mouseY >= r.y && mouseY <= r.y + r.h) {
+                exitIonicCrystal();
+                return;
+            }
+        }
+        if (_crystalPauseBtnBounds) {
+            let r = _crystalPauseBtnBounds;
+            if (mouseX >= r.x && mouseX <= r.x + r.w && mouseY >= r.y && mouseY <= r.y + r.h) {
+                togglePause();
+                return;
+            }
+        }
+        return;
+    }
+    if (!_crystalBtnBounds) return;
+    let r = _crystalBtnBounds;
+    if (mouseX >= r.x && mouseX <= r.x + r.w && mouseY >= r.y && mouseY <= r.y + r.h) {
+        enterIonicCrystal();
     }
 }
 
@@ -1358,21 +1476,16 @@ function updateModeInfoCard(mode) {
 
     if (mode === 'IONIC') {
         content.innerHTML = `
-            <p><b>1.</b> Elige un <em>metal</em> y un <em>no metal</em> en las ranuras A / B / C.</p>
-            <p><b>2.</b> Pulsa <em>Ceder e⁻</em> para transferir electrones de valencia del metal al no metal.</p>
-            <p><b>3.</b> Cuando los iones tienen cargas opuestas y configuración de gas noble (<b>octeto</b> o <b>dueto</b>), la atracción de <b>Coulomb</b> forma el enlace.</p>
-            <p>Prueba con <b>NaCl</b>, <b>MgCl₂</b> o <b>Na₂O</b>. Usa las tres ranuras para compuestos 1:2.</p>`;
+            <p>Un <em>metal</em> cede electrones a un <em>no metal</em> — ambos alcanzan el octeto y quedan con cargas opuestas. La atracción de <b>Coulomb</b> entre iones forma el enlace.</p>
+            <p>Elige átomos, pulsa <em>Ceder e⁻</em> y observa la transferencia. Prueba <b>NaCl</b>, <b>MgCl₂</b> o <b>Na₂O</b>.</p>`;
     } else if (mode === 'METALLIC') {
         content.innerHTML = `
-            <p><b>1.</b> Los átomos metálicos <em>ceden</em> sus e⁻ de valencia a un <em>mar de electrones</em> compartido.</p>
-            <p><b>2.</b> La red de <b>cationes</b> y el <b>mar de e⁻</b> se atraen electrostáticamente: eso <em>es</em> el enlace metálico.</p>
-            <p>Pulsa <em>Aplicar voltaje</em> para ver la <b>conductividad eléctrica</b>, o <em>Deformar red</em> para la <b>maleabilidad</b>.</p>`;
+            <p>Los metales ceden sus e⁻ de valencia a un <em>mar de electrones</em> deslocalizados que mantiene cohesionada la red de <b>cationes</b>.</p>
+            <p>Usa <em>Aplicar voltaje</em> para ver la <b>conductividad</b> y <em>Deformar red</em> para la <b>maleabilidad</b>.</p>`;
     } else if (mode === 'COVALENT') {
         content.innerHTML = `
-            <p><b>1.</b> Elige dos <em>no metales</em> en las ranuras A y B (o A, B y C para moléculas triatómicas).</p>
-            <p><b>2.</b> Pulsa <em>Compartir</em> para que cada átomo aporte un electrón al par compartido.</p>
-            <p><b>3.</b> Las órbitas se solapan: el par compartido orbita en la <b>zona de intersección</b> y cuenta para el octeto de ambos átomos.</p>
-            <p>Prueba con <b>H₂</b>, <b>Cl₂</b>, <b>O₂</b> o <b>HCl</b>. Para <b>H₂O</b> usa A=H, B=O, C=H.</p>`;
+            <p>Dos <em>no metales</em> comparten electrones de valencia. El par compartido orbita entre ambos núcleos y cuenta para el octeto de los dos átomos.</p>
+            <p>Pulsa <em>Compartir</em> en cada ranura. Prueba <b>H₂</b>, <b>Cl₂</b>, <b>HCl</b> o <b>H₂O</b> (A=H, B=O, C=H).</p>`;
     } else {
         content.innerHTML = `<p>Selecciona un modo para comenzar.</p>`;
     }
@@ -1394,6 +1507,10 @@ function enterIonicCrystal() {
     ionicAnColor   = anion.data.color;
     ionicAnCharge  = anion.netCharge;
 
+    // Snapshot electron config before clearing bond state
+    ionicCatElecConfig = cation.electrons.map(e => ({ shell: e.shell, transferred: !!e.transferred }));
+    ionicAnElecConfig  = anion.electrons.map(e => ({ shell: e.shell, transferred: !!e.transferred }));
+
     ionicCrystalMode   = true;
     ionicCrystalPhase  = 'normal';
     ionicShearOffset   = 0;
@@ -1404,6 +1521,8 @@ function enterIonicCrystal() {
 
     let ctrlRow = document.getElementById('atom-controls-row');
     if (ctrlRow) ctrlRow.style.display = 'none';
+    let pauseBtn = document.getElementById('pause-btn');
+    if (pauseBtn) pauseBtn.style.display = 'none';
     let frame = document.getElementById('sim-frame');
     if (frame) resizeCanvas(frame.offsetWidth, frame.offsetHeight);
 
@@ -1413,16 +1532,24 @@ function enterIonicCrystal() {
 }
 
 function exitIonicCrystal() {
-    ionicCrystalMode   = false;
-    ionicCrystalPhase  = 'normal';
-    ionicShowForces    = false;
-    elBtnCrystalView   = null;
-    elBtnIonicVoltage2 = null;
-    elBtnIonicShear2   = null;
-    elIonicCrystalInfo = null;
+    ionicCrystalMode       = false;
+    ionicCrystalPhase      = 'normal';
+
+    ionicShowShearForces   = false;
+    ionicShowElectrons     = false;
+    _crystalBackBtnBounds  = null;
+    _crystalPauseBtnBounds = null;
+    elBtnCrystalView       = null;
+    elBtnIonicVoltage2     = null;
+    elBtnIonicShear2       = null;
+    elSliderShear          = null;
+    elSliderShearLabel     = null;
+    elIonicCrystalInfo     = null;
 
     let ctrlRow = document.getElementById('atom-controls-row');
     if (ctrlRow) ctrlRow.style.display = 'flex';
+    let pauseBtn = document.getElementById('pause-btn');
+    if (pauseBtn) pauseBtn.style.display = '';
     let frame = document.getElementById('sim-frame');
     if (frame) resizeCanvas(frame.offsetWidth, frame.offsetHeight);
 
@@ -1438,14 +1565,15 @@ function initIonicCrystalGrid() {
     const cols = ionicCrystalCols;
     const rows = ionicCrystalRows;
 
+    const btmReserve = 66; // space at the bottom for canvas buttons
     let colSp = (width * 0.64) / (cols - 1);
-    let rowSp = (height * 0.60) / (rows - 1);
+    let rowSp = ((height - btmReserve) * 0.60) / (rows - 1);
     ionicCrystalSpacing = constrain(min(colSp, rowSp), 52, 88);
 
     let totalW = (cols - 1) * ionicCrystalSpacing;
     let totalH = (rows - 1) * ionicCrystalSpacing;
     ionicCrystalStartX = width  / 2 - totalW / 2;
-    ionicCrystalStartY = height / 2 - totalH / 2;
+    ionicCrystalStartY = (height - btmReserve) / 2 - totalH / 2;
 
     // Precompute text metrics for the draw loop (constant per spacing level)
     const nucSize = max(ionicCrystalSpacing * 0.38, 24);
@@ -1476,6 +1604,26 @@ function initIonicCrystalGrid() {
             textSize(supSz); const supW = textWidth(sup);
             textStyle(NORMAL);
 
+            const elCfg = isCat ? ionicCatElecConfig : ionicAnElecConfig;
+            // Count electrons per shell so we can space them evenly
+            const shellCounts = {};
+            for (let e of elCfg) shellCounts[e.shell] = (shellCounts[e.shell] || 0) + 1;
+            const shellIdx = {}; // running index per shell for angle assignment
+            const shellOffset = {}; // random starting offset per shell, same for all ions of same type
+            for (let s in shellCounts) {
+                shellIdx[s] = 0;
+                shellOffset[s] = random(TWO_PI);
+            }
+            const elAngles = elCfg.map(e => {
+                const idx   = shellIdx[e.shell]++;
+                const total = shellCounts[e.shell];
+                return {
+                    shell:       e.shell,
+                    transferred: e.transferred,
+                    angle:       shellOffset[e.shell] + (TWO_PI / total) * idx,
+                    speed:       max(0.008, 0.022 - e.shell * 0.005)
+                };
+            });
             ionicCrystalAtoms.push({
                 sym, sup, color: clr, r: cR, g: cG, b: cB, charge, isCat,
                 baseX: bx, baseY: by,
@@ -1485,6 +1633,7 @@ function initIonicCrystalGrid() {
                 // pre-baked draw constants
                 symW, supW, symSz, supSz, supShY,
                 nucSize,
+                elAngles,
             });
         }
     }
@@ -1496,37 +1645,6 @@ function initIonicCrystalGrid() {
 }
 
 function buildIonicCrystalUI() {
-    // Volver al enlace
-    let backRow = createDiv().class('reset-row');
-    let backBtn = createButton('← Volver al enlace');
-    backBtn.mousePressed(exitIonicCrystal);
-    backRow.child(backBtn);
-    uiContainer.child(backRow);
-
-    // Descripción del cristal
-    let descCard = createDiv().class('card');
-    descCard.child(createDiv('Red cristalina iónica').class('atom-card-label'));
-    let descBody = createDiv().class('card-body-static');
-    const catSup = ionicCatCharge === 1 ? '+' : ionicCatCharge + '+';
-    const anAbs  = Math.abs(ionicAnCharge);
-    const anSup  = anAbs === 1 ? '−' : anAbs + '−';
-    descBody.html(`
-        <div style="font-size:11px;color:var(--text-muted);line-height:1.7">
-            <div>Catión: <b style="color:${ionicCatColor}">${ionicCatSym}<sup>${catSup}</sup></b> &nbsp;·&nbsp;
-                 Anión: <b style="color:${ionicAnColor}">${ionicAnSym}<sup>${anSup}</sup></b></div>
-            <div style="margin-top:4px">Iones en posiciones <b>fijas</b>: atracción de Coulomb en todas las direcciones.</div>
-        </div>
-    `);
-    descCard.child(descBody);
-    uiContainer.child(descCard);
-
-    // Estado en tiempo real
-    let stCard = createDiv().class('card');
-    stCard.child(createDiv('Estado').class('atom-card-label'));
-    elIonicCrystalInfo = createDiv().class('card-body-static');
-    stCard.child(elIonicCrystalInfo);
-    uiContainer.child(stCard);
-
     // Experimentos
     let expCard = createDiv().class('card');
     expCard.child(createDiv('Experimentos').class('atom-card-label'));
@@ -1544,82 +1662,108 @@ function buildIonicCrystalUI() {
             ionicCrystalPhase = 'voltage';
             ionicShearOffset = 0; ionicShearTarget = 0;
             ionicShearAligned = false; ionicGapOffset = 0;
+            if (elSliderShear)      { elSliderShear.elt.value = '0'; }
+            if (elSliderShearLabel) { elSliderShearLabel.html('0%'); }
             elBtnIonicVoltage2.html('■ Quitar voltaje');
-            if (elBtnIonicShear2) elBtnIonicShear2.html('↔ Cizallar cristal');
         }
-        refreshIonicCrystalInfo();
     });
     expBody.child(elBtnIonicVoltage2);
 
-    elBtnIonicShear2 = createButton('↔ Cizallar cristal');
-    elBtnIonicShear2.style('width', '100%');
-    elBtnIonicShear2.mousePressed(() => {
-        if (ionicCrystalPhase === 'shear') {
+    // ── Slider de cizalladura ──────────────────────────────────
+    let shearRow = createDiv();
+    shearRow.style('display', 'flex').style('justify-content', 'space-between')
+            .style('align-items', 'center').style('margin-bottom', '4px');
+    let shearLblText = createDiv('Fuerza de cizalladura');
+    shearLblText.style('font-size', '11px').style('color', 'var(--text-muted)');
+    elSliderShearLabel = createDiv('0%');
+    elSliderShearLabel.style('font-size', '11px').style('color', 'var(--accent)')
+                      .style('font-weight', '600').style('min-width', '34px')
+                      .style('text-align', 'right');
+    shearRow.child(shearLblText);
+    shearRow.child(elSliderShearLabel);
+    expBody.child(shearRow);
+
+    elSliderShear = createElement('input');
+    elSliderShear.attribute('type', 'range');
+    elSliderShear.attribute('min', '0');
+    elSliderShear.attribute('max', '100');
+    elSliderShear.attribute('value', '0');
+    elSliderShear.style('width', '100%').style('cursor', 'pointer')
+                 .style('accent-color', 'var(--accent)').style('margin-bottom', '4px');
+    elSliderShear.elt.addEventListener('input', () => {
+        const v = parseInt(elSliderShear.elt.value);
+        if (v === 0) {
             ionicCrystalPhase = 'normal';
-            ionicShearOffset  = 0; ionicShearTarget = 0;
-            ionicShearAligned = false; ionicGapOffset = 0;
-            elBtnIonicShear2.html('↔ Cizallar cristal');
+            ionicShearOffset  = 0;
+            ionicShearAligned = false;
+            ionicGapOffset    = 0;
+            elSliderShearLabel.html('0%');
         } else {
-            ionicCrystalPhase = 'shear';
-            ionicShearTarget  = ionicCrystalSpacing * 0.5;
-            ionicShearAligned = false; ionicGapOffset = 0;
-            elBtnIonicVoltage2.html('⚡ Aplicar voltaje');
-            elBtnIonicShear2.html('↺ Reiniciar cristal');
+            if (ionicCrystalPhase !== 'shear') {
+                ionicCrystalPhase = 'shear';
+                elBtnIonicVoltage2.html('⚡ Aplicar voltaje');
+            }
+            ionicShearOffset  = (v / 100) * ionicCrystalSpacing;
+            ionicShearAligned = v >= 100;
+            if (!ionicShearAligned) ionicGapOffset = 0;
+            const lbl = v >= 95 ? '¡Fractura!' : v + '%';
+            elSliderShearLabel.html(`<span style="color:${v >= 95 ? '#EF4444' : 'var(--accent)'}">${lbl}</span>`);
         }
-        refreshIonicCrystalInfo();
     });
-    expBody.child(elBtnIonicShear2);
+    expBody.child(elSliderShear);
+
+    let shearHint = createDiv('← arrastra para aplicar fuerza lateral →');
+    shearHint.style('font-size', '10px').style('color', 'var(--text-muted)')
+             .style('text-align', 'center').style('opacity', '0.7');
+    expBody.child(shearHint);
 
     expCard.child(expBody);
     uiContainer.child(expCard);
 
-    // Checkbox — mostrar fuerzas de Coulomb
+    // Checkboxes de visualización
     let fCard = createDiv().class('card');
     let fBody = createDiv().class('card-body-static');
-    let fLabel = createDiv();
-    fLabel.style('display', 'flex').style('align-items', 'center').style('gap', '8px')
-          .style('cursor', 'pointer').style('padding', '2px 0');
-    let fChk = createElement('input');
-    fChk.attribute('type', 'checkbox');
-    fChk.attribute('id', 'chk-ionic-forces');
-    fChk.style('width', '14px').style('height', '14px').style('cursor', 'pointer')
-        .style('accent-color', 'var(--accent)');
-    fChk.elt.checked = false;
-    let fLbl = createElement('label', 'Mostrar fuerzas de Coulomb');
-    fLbl.attribute('for', 'chk-ionic-forces');
-    fLbl.style('font-size', '11.5px').style('color', 'var(--text-label)')
-        .style('cursor', 'pointer').style('user-select', 'none');
-    fLabel.child(fChk); fLabel.child(fLbl);
-    fBody.child(fLabel);
     fCard.child(createDiv('Visualización').class('atom-card-label'));
     fCard.child(fBody);
+
+    // Checkbox — ver fuerza resultante macroscópica
+    // Checkbox — fuerzas individuales en plano de cizalladura
+    let sLabel = createDiv();
+    sLabel.style('display', 'flex').style('align-items', 'center').style('gap', '8px')
+          .style('cursor', 'pointer').style('padding', '2px 0').style('margin-top', '4px');
+    let sChk = createElement('input');
+    sChk.attribute('type', 'checkbox');
+    sChk.attribute('id', 'chk-shear-forces');
+    sChk.style('width', '14px').style('height', '14px').style('cursor', 'pointer')
+        .style('accent-color', 'var(--accent)');
+    sChk.elt.checked = false;
+    let sLbl = createElement('label', 'Fuerzas en plano de cizalladura');
+    sLbl.attribute('for', 'chk-shear-forces');
+    sLbl.style('font-size', '11.5px').style('color', 'var(--text-label)')
+        .style('cursor', 'pointer').style('user-select', 'none');
+    sLabel.child(sChk); sLabel.child(sLbl);
+    fBody.child(sLabel);
+    sChk.elt.addEventListener('change', () => { ionicShowShearForces = sChk.elt.checked; });
+
+    // Checkbox — ver electrones
+    let eLabel = createDiv();
+    eLabel.style('display', 'flex').style('align-items', 'center').style('gap', '8px')
+          .style('cursor', 'pointer').style('padding', '2px 0');
+    let eChk = createElement('input');
+    eChk.attribute('type', 'checkbox');
+    eChk.attribute('id', 'chk-electrons');
+    eChk.style('width', '14px').style('height', '14px').style('cursor', 'pointer')
+        .style('accent-color', 'var(--accent)');
+    eChk.elt.checked = false;
+    let eLbl = createElement('label', 'Ver electrones');
+    eLbl.attribute('for', 'chk-electrons');
+    eLbl.style('font-size', '11.5px').style('color', 'var(--text-label)')
+        .style('cursor', 'pointer').style('user-select', 'none');
+    eLabel.child(eChk); eLabel.child(eLbl);
+    fBody.child(eLabel);
+    eChk.elt.addEventListener('change', () => { ionicShowElectrons = eChk.elt.checked; });
+
     uiContainer.child(fCard);
-    fChk.elt.addEventListener('change', () => { ionicShowForces = fChk.elt.checked; });
-
-    refreshIonicCrystalInfo();
-}
-
-function refreshIonicCrystalInfo() {
-    if (!elIonicCrystalInfo) return;
-    const phaseMap = {
-        normal:  '<span style="color:#10B981">Equilibrio — iones fijos</span>',
-        voltage: '<span style="color:#FBBF24">⚡ Voltaje aplicado</span>',
-        shear:   '<span style="color:#F59E0B">↔ Cizallamiento</span>',
-    };
-    let extra = '';
-    if (ionicCrystalPhase === 'voltage') {
-        extra = `<div style="margin-top:4px;color:#F87171;font-size:10.5px">
-            Sin e⁻ libres → no conduce en estado sólido</div>`;
-    } else if (ionicCrystalPhase === 'shear' && ionicShearAligned) {
-        extra = `<div style="margin-top:4px;color:#F87171;font-size:10.5px">
-            Cargas iguales enfrentadas → repulsión → fractura</div>`;
-    }
-    elIonicCrystalInfo.html(`
-        <div style="font-size:11px;color:var(--text-muted);line-height:1.6">
-            <div>Estado: ${phaseMap[ionicCrystalPhase] || '—'}</div>
-            ${extra}
-        </div>
-    `);
 }
 
 // ── Bucle principal ───────────────────────────────────────────
@@ -1628,8 +1772,10 @@ function drawIonicCrystal() {
     drawIonicCrystalBg();
     drawIonicCoulombLines();
     drawIonicCrystalGrid();
-    if (ionicShowForces) drawIonicForceDiagram();
+    if (ionicShowElectrons)   drawIonicCrystalElectrons();
+    if (ionicShowShearForces) drawIonicShearLineForces();
     drawIonicCrystalOverlay();
+    drawIonicCrystalButtons();
 }
 
 function updateIonicCrystalPhysics() {
@@ -1640,14 +1786,8 @@ function updateIonicCrystalPhysics() {
             ion.y = ion.baseY + cos(ionicVibTime * 1.9 + ion.vibPhase) * 2.8;
         }
     } else if (ionicCrystalPhase === 'shear') {
-        if (!ionicShearAligned) {
-            ionicShearOffset = lerp(ionicShearOffset, ionicShearTarget, 0.022);
-            if (abs(ionicShearOffset - ionicShearTarget) < 0.6) {
-                ionicShearOffset = ionicShearTarget;
-                ionicShearAligned = true;
-                refreshIonicCrystalInfo();
-            }
-        } else {
+        // ionicShearOffset is driven directly by the slider
+        if (ionicShearAligned) {
             ionicGapOffset = lerp(ionicGapOffset, ionicCrystalSpacing * 1.5, 0.028);
         }
         for (let ion of ionicCrystalAtoms) {
@@ -1663,6 +1803,11 @@ function updateIonicCrystalPhysics() {
         for (let ion of ionicCrystalAtoms) {
             ion.x = lerp(ion.x, ion.baseX, 0.09);
             ion.y = lerp(ion.y, ion.baseY, 0.09);
+        }
+    }
+    if (ionicShowElectrons) {
+        for (let ion of ionicCrystalAtoms) {
+            for (let e of ion.elAngles) { e.angle += e.speed; }
         }
     }
 }
@@ -1731,6 +1876,50 @@ function drawIonicCrystalGrid() {
     }
     textStyle(NORMAL);
     textAlign(CENTER, CENTER);
+}
+
+function drawIonicCrystalElectrons() {
+    const sp = ionicCrystalSpacing;
+    // Faint dot-dash orbits + electron dots, scaled to fit within lattice
+    noFill();
+    strokeWeight(0.8);
+    drawingContext.setLineDash([3, 3]);
+
+    for (let ion of ionicCrystalAtoms) {
+        if (!ion.elAngles.length) continue;
+
+        // Determine outermost shell and compute scale so it fits
+        let maxS = 0;
+        for (let e of ion.elAngles) { if (e.shell > maxS) maxS = e.shell; }
+        const scale = (sp * 0.39) / SHELL_RADII[maxS];
+
+        // Orbit rings (one per shell)
+        const drawnShells = new Set();
+        for (let e of ion.elAngles) {
+            if (drawnShells.has(e.shell)) continue;
+            drawnShells.add(e.shell);
+            const r = SHELL_RADII[e.shell] * scale;
+            stroke(100, 116, 139, 160);
+            ellipse(ion.x, ion.y, r * 2, r * 2);
+        }
+    }
+    drawingContext.setLineDash([]);
+
+    // Electron dots (separate pass, no stroke)
+    noStroke();
+    for (let ion of ionicCrystalAtoms) {
+        if (!ion.elAngles.length) continue;
+        let maxS = 0;
+        for (let e of ion.elAngles) { if (e.shell > maxS) maxS = e.shell; }
+        const scale = (sp * 0.39) / SHELL_RADII[maxS];
+        for (let e of ion.elAngles) {
+            const r  = SHELL_RADII[e.shell] * scale;
+            const ex = ion.x + cos(e.angle) * r;
+            const ey = ion.y + sin(e.angle) * r;
+            fill(e.transferred ? 148 : 245, e.transferred ? 163 : 158, e.transferred ? 184 : 11);
+            circle(ex, ey, 4);
+        }
+    }
 }
 
 function drawIonicCrystalOverlay() {
@@ -1845,8 +2034,6 @@ function drawIonicShearOverlay() {
             textAlign(CENTER, CENTER); textSize(14); textStyle(BOLD);
             text('¡Fractura! — el cristal iónico es frágil', width / 2, msgY1);
             textStyle(NORMAL);
-            fill('#475569'); textSize(11);
-            text('(contraste: el metal se deforma — su mar de e⁻ no tiene planos de carga fija)', width / 2, msgY2);
         } else {
             fill(239, 68, 68, alpha + 60);
             textAlign(CENTER, CENTER); textSize(13); textStyle(BOLD);
@@ -1854,6 +2041,59 @@ function drawIonicShearOverlay() {
         }
         textStyle(NORMAL);
     }
+}
+
+// ─── Flechas resultantes macroscópicas sobre cada bloque de cizalladura ───────
+
+// ─── Botones de control dibujados en el canvas (fondo del modo cristal) ───────
+function drawIonicCrystalButtons() {
+    const btnW = 158, btnH = 36, gap = 10;
+    const totalW = btnW * 2 + gap;
+    const bx  = width / 2 - totalW / 2;
+    const paX = bx + btnW + gap;
+    const by  = height - btnH - 14;
+
+    const backHover  = mouseX >= bx  && mouseX <= bx  + btnW && mouseY >= by && mouseY <= by + btnH;
+    const pauseHover = mouseX >= paX && mouseX <= paX + btnW && mouseY >= by && mouseY <= by + btnH;
+    const isPaused   = !isLooping();
+
+    // ── Back button ──
+    noStroke();
+    fill(30, 41, 59, backHover ? 210 : 140);
+    rect(bx, by, btnW, btnH, 8);
+    stroke(71, 85, 105, backHover ? 220 : 110);
+    strokeWeight(1.5);
+    noFill();
+    rect(bx, by, btnW, btnH, 8);
+    drawingContext.setLineDash([]);
+    noStroke();
+    fill(backHover ? 226 : 148, backHover ? 232 : 163, backHover ? 240 : 184);
+    textAlign(CENTER, CENTER);
+    textSize(12);
+    textStyle(BOLD);
+    text('← Volver al enlace', bx + btnW / 2, by + btnH / 2);
+
+    // ── Pause/resume button ──
+    noStroke();
+    fill(isPaused ? 37 : 30, isPaused ? 58 : 41, isPaused ? 99 : 59, pauseHover ? 210 : 140);
+    rect(paX, by, btnW, btnH, 8);
+    stroke(isPaused ? 59 : 71, isPaused ? 130 : 85, isPaused ? 246 : 105, pauseHover ? 220 : 110);
+    strokeWeight(1.5);
+    noFill();
+    rect(paX, by, btnW, btnH, 8);
+    drawingContext.setLineDash([]);
+    noStroke();
+    fill(isPaused ? 147 : (pauseHover ? 226 : 148),
+         isPaused ? 197 : (pauseHover ? 232 : 163),
+         isPaused ? 253 : (pauseHover ? 240 : 184));
+    textAlign(CENTER, CENTER);
+    textSize(12);
+    textStyle(BOLD);
+    text(isPaused ? '▶ Reanudar' : '⏸ Pausar', paX + btnW / 2, by + btnH / 2);
+    textStyle(NORMAL);
+
+    _crystalBackBtnBounds  = { x: bx,  y: by, w: btnW, h: btnH };
+    _crystalPauseBtnBounds = { x: paX, y: by, w: btnW, h: btnH };
 }
 
 // ─── Diagrama de fuerzas de Coulomb sobre el ión del plano de cizalladura ────
@@ -1941,6 +2181,86 @@ function drawIonicForceDiagram() {
         triangle(-5, 2.5, -5, -2.5, 0, 0);
         pop();
         noStroke(); fill(148, 163, 184, fadeAlpha * 0.85);
+        textAlign(LEFT, CENTER); textSize(9);
+        text(it.lbl, lX + 24, y);
+    }
+}
+
+// ─── Vectores de Coulomb para todos los iones del plano de cizalladura ────────
+function drawIonicShearLineForces() {
+    const cols   = ionicCrystalCols;
+    const rows   = ionicCrystalRows;
+    const s      = ionicCrystalSpacing;
+    const aS     = 28;          // escala más corta para no solapar entre átomos
+    const alpha  = 195;
+
+    // Filas 1 y 2: las dos que bordean el plano de cizalladura
+    const shearRows = [
+        ionicCrystalRowArrays[1] || [],
+        ionicCrystalRowArrays[2] || [],
+    ];
+
+    const dirs = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+
+    for (const rowIons of shearRows) {
+        for (const ref of rowIons) {
+            let resFx = 0, resFy = 0;
+            const fvecs = [];
+
+            for (const [dr, dc] of dirs) {
+                const nr = ref.row + dr, nc = ref.col + dc;
+                if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
+                const nb = ionicCrystalAtoms[nr * cols + nc];
+                if (!nb) continue;
+                const dx = nb.x - ref.x, dy = nb.y - ref.y;
+                const r2 = dx * dx + dy * dy, r = sqrt(r2);
+                if (r < 2) continue;
+                const same = ref.isCat === nb.isCat;
+                const fMag = (s * s) / r2;
+                const sign = same ? -1 : 1;
+                const fx = sign * (dx / r) * fMag;
+                const fy = sign * (dy / r) * fMag;
+                resFx += fx; resFy += fy;
+                const isDirect = Math.abs(dr) + Math.abs(dc) === 1;
+                fvecs.push({ isDirect, same, fx, fy });
+            }
+
+            // Flechas individuales
+            for (const f of fvecs) {
+                const col = f.same ? [239, 68, 68] : [52, 211, 153];
+                const sw  = f.isDirect ? 1.5 : 0.9;
+                _iArrow(ref.x, ref.y,
+                        ref.x + f.fx * aS, ref.y + f.fy * aS,
+                        col, alpha, sw, f.isDirect ? 4 : 3);
+            }
+
+            // Resultante
+            const resMag = sqrt(resFx * resFx + resFy * resFy);
+            if (resMag > 0.005) {
+                const ex = ref.x + resFx * aS, ey = ref.y + resFy * aS;
+                _iArrow(ref.x, ref.y, ex, ey, [251, 191, 36], alpha, 2.2, 6);
+            }
+        }
+    }
+
+    // Leyenda compartida (misma esquina que el diagrama de Coulomb del ión único)
+    const lItems = _FORCE_LEGEND;
+    let lW = 152, lH = lItems.length * 16 + 10;
+    let lX = width  - lW - 14;
+    let lY = height - lH - 14;
+    noStroke(); fill(8, 14, 28, 195);
+    rect(lX - 6, lY - 6, lW + 8, lH + 4, 7);
+    for (let i = 0; i < lItems.length; i++) {
+        let it = lItems[i], y = lY + i * 16 + 2;
+        let sw = i === 2 ? 2.2 : 1.5;
+        stroke(...it.col, alpha); strokeWeight(sw);
+        line(lX + 2, y, lX + 18, y);
+        push();
+        translate(lX + 18, y);
+        fill(...it.col, alpha); noStroke();
+        triangle(-5, 2.5, -5, -2.5, 0, 0);
+        pop();
+        noStroke(); fill(148, 163, 184, alpha * 0.85);
         textAlign(LEFT, CENTER); textSize(9);
         text(it.lbl, lX + 24, y);
     }
@@ -2054,8 +2374,10 @@ function buildMetallicUI() {
     // Estado del enlace
     let infoCard = createDiv().class('card');
     infoCard.child(createDiv('Estado del enlace').class('atom-card-label'));
-    elMetallicInfo = createDiv().class('card-body-static');
-    infoCard.child(elMetallicInfo);
+    let infoBody = createDiv().class('card-body-static');
+    elMetallicInfo = createDiv().class('info-section');
+    infoBody.child(elMetallicInfo);
+    infoCard.child(infoBody);
     uiContainer.child(infoCard);
 
     // Experimentos
@@ -2121,11 +2443,10 @@ function refreshMetallicInfo() {
         deform:  `<span style="color:#F59E0B">↔ Deformando red</span>`,
     };
     elMetallicInfo.html(`
-        <div>Metal: <b style="color:${metal.color}">${metallicMetal} — ${metal.name}</b></div>
-        <div>e⁻ de valencia: <b>${metal.valence}</b> por átomo</div>
-        <div>Catión: <b>${metallicMetal}<sup>${metal.charge}+</sup></b></div>
-        <div>e⁻ en el mar: <b>${numE}</b></div>
-        <div style="margin-top:4px">Estado: ${phaseMap[metallicPhase] || '—'}</div>
+        <p>Metal: <b><em style="color:${metal.color}">${metallicMetal}</em> — ${metal.name}</b></p>
+        <p>Valencia: <b>${metal.valence} e⁻</b> por átomo · Catión <b>${metallicMetal}<sup>${metal.charge}+</sup></b></p>
+        <p>e⁻ en el mar: <b>${numE}</b> · T. fusión: <b>${metal.mp} °C</b></p>
+        <p>Estado: ${phaseMap[metallicPhase] || '—'}</p>
     `);
 }
 
