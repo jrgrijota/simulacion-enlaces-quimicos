@@ -6,9 +6,11 @@ const BOND_COLOR  = '#F59E0B';
 
 const ELEMENTS = {
     H:    { Z: 1,  config: [1],            nobleTarget: 2, isMetal: false, color: '#38BDF8', name: 'Hidrógeno' },
-    Li:   { Z: 3,  config: [2, 1],         nobleTarget: 2, isMetal: true,  color: '#A78BFA', name: 'Litio'     },
+    C:    { Z: 6,  config: [2, 4],         nobleTarget: 8, isMetal: false, color: '#A8A29E', name: 'Carbono'   },
+    N:    { Z: 7,  config: [2, 5],         nobleTarget: 8, isMetal: false, color: '#818CF8', name: 'Nitrógeno' },
     O:    { Z: 8,  config: [2, 6],         nobleTarget: 8, isMetal: false, color: '#FB923C', name: 'Oxígeno'   },
     F:    { Z: 9,  config: [2, 7],         nobleTarget: 8, isMetal: false, color: '#FBBF24', name: 'Flúor'     },
+    Li:   { Z: 3,  config: [2, 1],         nobleTarget: 2, isMetal: true,  color: '#A78BFA', name: 'Litio'     },
     Na:   { Z: 11, config: [2, 8, 1],      nobleTarget: 8, isMetal: true,  color: '#F43F5E', name: 'Sodio'     },
     Mg:   { Z: 12, config: [2, 8, 2],      nobleTarget: 8, isMetal: true,  color: '#34D399', name: 'Magnesio'  },
     S:    { Z: 16, config: [2, 8, 6],      nobleTarget: 8, isMetal: false, color: '#A3E635', name: 'Azufre'    },
@@ -21,15 +23,16 @@ const ELEMENTS = {
 // ============================================================
 // ESTADO GLOBAL
 // ============================================================
-let currentMode   = 'IONIC';
-let atoms         = [];
+let currentMode    = 'IONIC';
+let atoms          = [];
 let uiContainer;
-let bondFormed    = false;
-let bondProgress  = 0;
-let origPositions = [];
-let atomSelects   = [];
-let elResultCard  = null;
-let elResultBody  = null;
+let bondFormed     = false;
+let bondProgress   = 0;
+let origPositions  = [];
+let atomSelects    = [];
+let elResultCard   = null;
+let elResultBody   = null;
+let covalentBonds  = [];   // [{atomA, atomB, eA, eB}] — pares compartidos
 
 // ============================================================
 // HELPERS
@@ -82,6 +85,12 @@ function draw() {
         drawEmptySlots();
         drawAtomLabels();
         if (bondFormed) drawBondEffect();
+    } else if (currentMode === 'COVALENT') {
+        updateBondAnim();
+        for (let a of atoms) { a.update(); a.draw(); }
+        drawEmptySlots();
+        drawCovalentLabels();
+        if (bondFormed) drawBondEffect();
     } else {
         drawComingSoon();
     }
@@ -95,9 +104,9 @@ function windowResized() {
 
 function handleModeChange() {
     currentMode = this.value();
-    // Show/hide controls row first so sim-frame gets correct height
     let ctrlRow = document.getElementById('atom-controls-row');
-    if (ctrlRow) ctrlRow.style.display = currentMode === 'IONIC' ? 'flex' : 'none';
+    let showRow = currentMode === 'IONIC' || currentMode === 'COVALENT';
+    if (ctrlRow) ctrlRow.style.display = showRow ? 'flex' : 'none';
     let frame = document.getElementById('sim-frame');
     if (frame) resizeCanvas(frame.offsetWidth, frame.offsetHeight);
     initSimulation();
@@ -121,7 +130,8 @@ function initSimulation() {
     bondProgress = 0;
 
     let ctrlRow = select('#atom-controls-row');
-    if (ctrlRow) ctrlRow.style('display', currentMode === 'IONIC' ? 'flex' : 'none');
+    let showRow = currentMode === 'IONIC' || currentMode === 'COVALENT';
+    if (ctrlRow) ctrlRow.style('display', showRow ? 'flex' : 'none');
 
     if (currentMode === 'IONIC') {
         let cx = width / 2, cy = constrain(height * 0.44, 100, 230);
@@ -137,6 +147,21 @@ function initSimulation() {
         atoms[1].setElement('Cl');
         atoms[2].setElement('NONE');
         buildIonicUI();
+    } else if (currentMode === 'COVALENT') {
+        covalentBonds = [];
+        let cx = width / 2, cy = constrain(height * 0.44, 100, 230);
+        origPositions = [
+            createVector(cx - width * 0.22, cy),
+            createVector(cx + width * 0.22, cy),
+            createVector(cx,                cy)
+        ];
+        for (let i = 0; i < 3; i++) {
+            atoms.push(new Atom(origPositions[i].x, origPositions[i].y, i));
+        }
+        atoms[0].setElement('H');
+        atoms[1].setElement('H');
+        atoms[2].setElement('NONE');
+        buildCovalentUI();
     }
 }
 
@@ -155,6 +180,21 @@ function resetSimulation() {
     resetAtomPositions();
     atoms[0].setElement('Na');
     atoms[1].setElement('Cl');
+    atoms[2].setElement('NONE');
+    for (let i = 0; i < 3; i++) {
+        if (atomSelects[i]) atomSelects[i].value(atoms[i].symbol);
+    }
+    if (elResultCard) elResultCard.style('display', 'none');
+    updateUIState();
+}
+
+function resetCovalentSimulation() {
+    bondFormed    = false;
+    bondProgress  = 0;
+    covalentBonds = [];
+    resetAtomPositions();
+    atoms[0].setElement('H');
+    atoms[1].setElement('H');
     atoms[2].setElement('NONE');
     for (let i = 0; i < 3; i++) {
         if (atomSelects[i]) atomSelects[i].value(atoms[i].symbol);
@@ -238,6 +278,165 @@ function buildIonicUI() {
 }
 
 // ============================================================
+// UI COVALENTE
+// ============================================================
+function buildCovalentUI() {
+    // Sidebar: reset
+    let resetRow = createDiv().class('reset-row');
+    let resetBtn = createButton('↺ Reiniciar simulación');
+    resetBtn.mousePressed(resetCovalentSimulation);
+    resetRow.child(resetBtn);
+    uiContainer.child(resetRow);
+
+    // Sidebar: result card
+    elResultCard = createDiv().class('card');
+    elResultCard.style('display', 'none');
+    elResultCard.child(createDiv('✔ Enlace formado').class('result-header'));
+    elResultBody = createDiv().class('card-body-static');
+    elResultCard.child(elResultBody);
+    uiContainer.child(elResultCard);
+
+    // Columnas de control bajo el canvas
+    const labels = ['Átomo A', 'Átomo B', 'Átomo C'];
+    for (let i = 0; i < 3; i++) {
+        let ctrl = select(`#ctrl-${i}`);
+        ctrl.child(createDiv(labels[i]).class('atom-ctrl-label'));
+
+        let sel = createSelect();
+        sel.option('— Vacío —', 'NONE');
+        for (let sym in ELEMENTS) {
+            if (sym === 'NONE') continue;
+            if (ELEMENTS[sym].isMetal) continue;   // enlace covalente: solo no metales
+            sel.option(`${sym} - ${ELEMENTS[sym].name}`, sym);
+        }
+        sel.value(atoms[i].symbol);
+        atomSelects[i] = sel;
+        sel.changed(() => {
+            bondFormed    = false;
+            bondProgress  = 0;
+            covalentBonds = [];
+            resetAtomPositions();
+            if (elResultCard) elResultCard.style('display', 'none');
+            atoms[i].setElement(sel.value());
+            updateUIState();
+        });
+        ctrl.child(sel);
+        ctrl.child(createDiv().class('status-box').id(`data-${i}`));
+
+        let btnBox = createDiv().class('btn-group');
+        if (i === 0) {
+            let b = createButton('Compartir →').id('btn-cov-0r');
+            b.mousePressed(() => shareElectron(0, 1));
+            btnBox.child(b);
+        } else if (i === 1) {
+            let bL = createButton('← A').id('btn-cov-1l');
+            bL.mousePressed(() => shareElectron(0, 1));
+            let bR = createButton('C →').id('btn-cov-1r');
+            bR.mousePressed(() => shareElectron(1, 2));
+            btnBox.child(bL);
+            btnBox.child(bR);
+        } else {
+            let b = createButton('← Compartir').id('btn-cov-2l');
+            b.mousePressed(() => shareElectron(1, 2));
+            btnBox.child(b);
+        }
+        ctrl.child(btnBox);
+    }
+
+    updateUIState();
+}
+
+// ============================================================
+// LÓGICA ENLACE COVALENTE
+// ============================================================
+function shareElectron(idxA, idxB) {
+    let atomA = atoms[idxA], atomB = atoms[idxB];
+    if (atomA.symbol === 'NONE' || atomB.symbol === 'NONE') return;
+    if (bondFormed) return;
+
+    let vsA  = atomA.nativeMaxShell();
+    let vsB  = atomB.nativeMaxShell();
+    // Cada átomo aporta un electrón no compartido de su capa de valencia
+    let eA = atomA.electrons.find(e => e.shell === vsA && !e.shared);
+    let eB = atomB.electrons.find(e => e.shell === vsB && !e.shared);
+    if (!eA || !eB) return; // alguno no tiene electrones libres para compartir
+
+    eA.shared = true;  eA.sharedWith = idxB;
+    eB.shared = true;  eB.sharedWith = idxA;
+    covalentBonds.push({ atomA: idxA, atomB: idxB, eA, eB });
+
+    updateUIState();
+    checkCovalentBondFormed();
+}
+
+function canShareCovalent(idxA, idxB) {
+    let atomA = atoms[idxA], atomB = atoms[idxB];
+    if (!atomA || !atomB) return false;
+    if (atomA.symbol === 'NONE' || atomB.symbol === 'NONE') return false;
+    if (bondFormed) return false;
+    let vsA = atomA.nativeMaxShell();
+    let vsB = atomB.nativeMaxShell();
+    let freeA = atomA.electrons.some(e => e.shell === vsA && !e.shared);
+    let freeB = atomB.electrons.some(e => e.shell === vsB && !e.shared);
+    return freeA && freeB;
+}
+
+function checkCovalentBondFormed() {
+    let active = atoms.filter(a => a.symbol !== 'NONE');
+    if (active.length < 2) return;
+    if (!active.every(a => a.isStableCovalent())) return;
+
+    bondFormed = true;
+    let activeIdx = atoms.reduce((acc, a, i) => a.symbol !== 'NONE' ? [...acc, i] : acc, []);
+    let n       = activeIdx.length;
+    let spacing = 140;
+    let cx      = width / 2;
+    let cy      = constrain(height * 0.44, 100, 230);
+    for (let k = 0; k < n; k++) {
+        atoms[activeIdx[k]].targetPos = createVector(cx + (k - (n - 1) / 2) * spacing, cy);
+    }
+
+    if (elResultCard && elResultBody) {
+        elResultCard.style('display', 'block');
+        elResultBody.html(`
+            <div class="compound-formula">${getCompoundName()}</div>
+            <div class="result-detail">Enlace covalente · Par de electrones compartido</div>
+        `);
+    }
+}
+
+// ============================================================
+// ETIQUETAS COVALENTES EN CANVAS
+// ============================================================
+function drawCovalentLabels() {
+    if (bondFormed && bondProgress > 0.85) return;
+    for (let a of atoms) {
+        if (a.symbol === 'NONE') continue;
+        let maxShell = a.nativeMaxShell();
+        let baseY    = a.pos.y + SHELL_RADII[maxShell] + 16;
+        let eCount   = a.effectiveValenceCount();
+        let target   = a.data.nobleTarget;
+        let stable   = a.isStableCovalent();
+
+        noStroke();
+        textAlign(CENTER, CENTER);
+        textStyle(BOLD);
+        textSize(15);
+        fill('#CBD5E1');
+        text(a.symbol, a.pos.x, baseY);
+        textSize(11);
+        fill(stable ? color('#10B981') : color('#64748B'));
+        text(`${eCount} / ${target} e⁻`, a.pos.x, baseY + 18);
+        if (stable) {
+            textSize(14);
+            fill('#10B981');
+            text('✔', a.pos.x, baseY + 34);
+        }
+        textStyle(NORMAL);
+    }
+}
+
+// ============================================================
 // CLASE ATOM
 // ============================================================
 class Atom {
@@ -266,12 +465,14 @@ class Atom {
             let speed = max(0.008, 0.022 - n * 0.005);
             for (let e = 0; e < numE; e++) {
                 this.electrons.push({
-                    shell:     n,
-                    radius:    SHELL_RADII[n],
-                    angle:     map(e, 0, numE, 0, TWO_PI),
-                    speed:     speed,
-                    baseColor: this.data.color,
-                    color:     this.data.color
+                    shell:      n,
+                    radius:     SHELL_RADII[n],
+                    angle:      map(e, 0, numE, 0, TWO_PI),
+                    speed:      speed,
+                    baseColor:  this.data.color,
+                    color:      this.data.color,
+                    shared:     false,
+                    sharedWith: null   // índice del otro átomo si está compartido
                 });
             }
         }
@@ -302,16 +503,42 @@ class Atom {
         return this.valenceCount() === this.data.nobleTarget;
     }
 
+    // Cuenta electrones efectivos en enlace covalente:
+    // propios en la capa de valencia + los del par compartido aportados por el compañero.
+    effectiveValenceCount() {
+        if (this.symbol === 'NONE') return 0;
+        let vs        = this.nativeMaxShell();
+        let ownVal    = this.electrons.filter(e => e.shell === vs).length;
+        let fromParts = 0;
+        for (let a of atoms) {
+            if (a === this) continue;
+            for (let e of a.electrons) {
+                if (e.shared && e.sharedWith === this.index) fromParts++;
+            }
+        }
+        return ownVal + fromParts;
+    }
+
+    isStableCovalent() {
+        if (this.symbol === 'NONE') return null;
+        return this.effectiveValenceCount() === this.data.nobleTarget;
+    }
+
     update() {
         this.pos.x = lerp(this.pos.x, this.targetPos.x, 0.05);
         this.pos.y = lerp(this.pos.y, this.targetPos.y, 0.05);
         for (let e of this.electrons) {
             e.angle += e.speed;
-            if (bondFormed) {
-                let t   = min(bondProgress * 1.6, 1);
-                e.color = lerpColor(color(e.baseColor), color(BOND_COLOR), t);
+            if (currentMode === 'COVALENT') {
+                // Electrón compartido: color neutro distinto de ambos átomos
+                e.color = e.shared ? '#E879F9' : e.baseColor;
             } else {
-                e.color = e.baseColor;
+                if (bondFormed) {
+                    let t   = min(bondProgress * 1.6, 1);
+                    e.color = lerpColor(color(e.baseColor), color(BOND_COLOR), t);
+                } else {
+                    e.color = e.baseColor;
+                }
             }
         }
     }
@@ -521,6 +748,14 @@ function updateBondAnim() {
 // ACTUALIZACIÓN DEL ESTADO UI
 // ============================================================
 function updateUIState() {
+    if (currentMode === 'COVALENT') {
+        updateUIStateCovalent();
+    } else {
+        updateUIStateIonic();
+    }
+}
+
+function updateUIStateIonic() {
     for (let i = 0; i < 3; i++) {
         let a   = atoms[i];
         let box = select(`#data-${i}`);
@@ -562,6 +797,45 @@ function updateUIState() {
         }
     }
     updateButtonStates();
+}
+
+function updateUIStateCovalent() {
+    for (let i = 0; i < 3; i++) {
+        let a   = atoms[i];
+        let box = select(`#data-${i}`);
+        if (!box) continue;
+
+        if (a.symbol === 'NONE') {
+            box.html('<div class="ui-empty">— ranura vacía —</div>');
+        } else {
+            let eEff     = a.effectiveValenceCount();
+            let target   = a.data.nobleTarget;
+            let stable   = a.isStableCovalent();
+            let ruleName = target === 2 ? 'Dueto' : 'Octeto';
+            let need     = target - eEff;
+            let bonds    = covalentBonds.filter(b => b.atomA === i || b.atomB === i).length;
+
+            let needHtml = stable ? '' :
+                `<div class="check-fail">Faltan ${need} e⁻ para ${ruleName.toLowerCase()}</div>`;
+            let checkHtml = stable
+                ? `<div class="check-pass">✔ ${ruleName} alcanzado</div>`
+                : `<div class="check-fail">✖ ${ruleName} no alcanzado</div>`;
+            let bondsHtml = bonds > 0
+                ? `<div>Enlaces formados: <b>${bonds}</b></div>` : '';
+
+            box.html(`
+                <div>e⁻ efectivos: <b>${eEff} / ${target}</b></div>
+                ${bondsHtml}
+                ${needHtml}
+                <div style="margin-top:3px">${checkHtml}</div>
+            `);
+        }
+    }
+    // Habilitar/deshabilitar botones de compartir
+    setBtn('btn-cov-0r', canShareCovalent(0, 1));
+    setBtn('btn-cov-1l', canShareCovalent(0, 1));
+    setBtn('btn-cov-1r', canShareCovalent(1, 2));
+    setBtn('btn-cov-2l', canShareCovalent(1, 2));
 }
 
 // ============================================================
@@ -687,7 +961,8 @@ function drawBondEffect() {
         textAlign(CENTER, CENTER);
         textSize(17);
         textStyle(BOLD);
-        text('¡Enlace iónico formado!', bx, by);
+        let msg = currentMode === 'COVALENT' ? '¡Enlace covalente formado!' : '¡Enlace iónico formado!';
+        text(msg, bx, by);
         textStyle(NORMAL);
     }
 }
