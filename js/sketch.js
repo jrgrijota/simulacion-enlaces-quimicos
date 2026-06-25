@@ -2673,9 +2673,24 @@ function updateMetallicElectrons() {
         e.x += e.vx;
         e.y += e.vy;
 
-        // Rebote elástico en todas las paredes, también bajo voltaje: un electrón
-        // nunca cruza de un lado al otro (nada de wraparound/teletransporte).
-        {
+        if (metallicPhase === 'voltage') {
+            // Corriente continua: si el electrón sale por un lateral, "se va por
+            // el cable" y se introduce OTRO nuevo por el electrodo de origen
+            // (izquierda), en el sentido de la corriente de electrones (+x). No
+            // es el mismo e⁻ reapareciendo: entra en una posición y velocidad
+            // nuevas, de modo que no hay teletransporte.
+            if (e.x < minX || e.x > maxX) {
+                e.x = minX + 1;
+                e.y = random(minY, maxY);
+                let s = thermalSpeed() * random(0.9, 1.25);
+                let a = random(-0.3, 0.3);          // casi horizontal, sentido +x
+                e.vx = Math.cos(a) * s;
+                e.vy = Math.sin(a) * s;
+            }
+            // Verticalmente no se escapa del cable: rebote.
+            if (e.y < minY || e.y > maxY) { e.vy *= -1; e.y = constrain(e.y, minY, maxY); }
+        } else {
+            // Sin corriente: rebote elástico en todas las paredes.
             if (e.x < minX || e.x > maxX) { e.vx *= -1; e.x = constrain(e.x, minX, maxX); }
             if (e.y < minY || e.y > maxY) { e.vy *= -1; e.y = constrain(e.y, minY, maxY); }
         }
