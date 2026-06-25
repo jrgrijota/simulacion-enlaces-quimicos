@@ -2591,14 +2591,17 @@ function latticeIonPos(atom) {
 
 // Rapidez térmica de referencia y probabilidad de dispersión: ambas crecen con
 // la temperatura (red más caliente ⇒ choques más frecuentes ⇒ más resistencia).
-function thermalSpeed() { return 0.8 + latticeTemp * 0.35; }
-function scatterProb()  { return 0.10 + latticeTemp * 0.06; }
+// La rapidez es alta: los e⁻ de conducción están deslocalizados y son veloces,
+// no se quedan ligados a ningún core.
+function thermalSpeed() { return 1.4 + latticeTemp * 0.4; }
+function scatterProb()  { return 0.12 + latticeTemp * 0.07; }
 
-// Interacción del electrón con la red en una sola pasada:
-//  · Atracción hacia el catión más cercano → cohesión del enlace metálico.
-//  · Dispersión al pasar junto a un core → ORIGEN de la resistencia (modelo de
-//    Drude). Al chocar, la velocidad se re-aleatoriza y se borra la deriva
-//    acumulada. La sección de choque crece con la vibración térmica (∝ T).
+// Interacción del electrón con la red en una sola pasada (modelo de Drude):
+//  · Los cores son CENTROS DE DISPERSIÓN que DESVÍAN al electrón hacia afuera,
+//    no pozos que lo capturan → los e⁻ no se "pegan" (siguen deslocalizados).
+//    De estos choques emerge la resistencia; la sección crece con la T.
+//  · Una cohesión MUY débil y de medio alcance (apagada cerca del core) evita
+//    que el mar se "vacíe" sin llegar a atrapar a nadie.
 function interactWithIons(e) {
     let bdx = 0, bdy = 0, bestD2 = Infinity;
     for (let atom of latticeAtoms) {
@@ -2607,20 +2610,27 @@ function interactWithIons(e) {
         let d2 = dx * dx + dy * dy;
         if (d2 < bestD2) { bestD2 = d2; bdx = dx; bdy = dy; }
     }
-    let d = Math.sqrt(bestD2);
-    if (d >= 1) {
-        const F = 0.04;                 // cohesión suave
-        e.vx += (bdx / d) * F;
-        e.vy += (bdy / d) * F;
+    let d  = Math.sqrt(bestD2);
+    if (d < 1) return;
+
+    let rs = latticeSpacing * 0.20 + thermalAmplitude();   // radio del core
+    if (d < rs) {
+        // Colisión: deflexión HACIA AFUERA (semiplano saliente), conservando una
+        // rapidez alta → el electrón abandona el core, nunca queda atrapado.
+        if (random() < scatterProb()) {
+            let nAng = Math.atan2(-bdy / d, -bdx / d);            // normal saliente
+            let ang  = nAng + random(-1, 1) * (Math.PI * 0.45);  // ±81° en torno a ella
+            let s    = thermalSpeed() * random(0.9, 1.25);
+            e.vx = Math.cos(ang) * s;
+            e.vy = Math.sin(ang) * s;
+        }
+        return;   // sin atracción dentro del core (no hay pozo que lo capture)
     }
-    // Colisión con el core: re-aleatoriza la velocidad (pierde la deriva).
-    let rs = latticeSpacing * 0.22 + thermalAmplitude();
-    if (d < rs && random() < scatterProb()) {
-        let ang = random(TWO_PI);
-        let s   = thermalSpeed() * random(0.7, 1.3);
-        e.vx = Math.cos(ang) * s;
-        e.vy = Math.sin(ang) * s;
-    }
+
+    // Cohesión muy suave a media distancia, se desvanece al acercarse al core.
+    const F = 0.012;
+    e.vx += (bdx / d) * F;
+    e.vy += (bdy / d) * F;
 }
 
 function updateMetallicElectrons() {
