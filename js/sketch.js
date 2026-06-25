@@ -123,9 +123,8 @@ function maxElectronRadius(atomList) {
     let r = 0;
     for (let a of atomList) {
         if (a.symbol !== 'NONE') {
-            // Use native shell count to get max orbit, even if electrons = 0
-            let shells = a.data.config.length;
-            if (shells > 0) r = Math.max(r, SHELL_RADII[shells - 1]);
+            // Capa más externa visible (nativa o nueva por electrón extra)
+            r = Math.max(r, SHELL_RADII[a.displayMaxShell()]);
         }
     }
     return r || SHELL_RADII[2];
@@ -341,11 +340,13 @@ function initSimulation() {
     }
 }
 
-function resetAtomPositions() {
+// smooth=true: solo fija el destino y deja que update() anime la separación
+// (transición fluida de enlazados a separados). smooth=false: salto inmediato.
+function resetAtomPositions(smooth = false) {
     for (let i = 0; i < atoms.length; i++) {
         if (origPositions[i]) {
-            atoms[i].pos       = origPositions[i].copy();
             atoms[i].targetPos = origPositions[i].copy();
+            if (!smooth) atoms[i].pos = origPositions[i].copy();
         }
     }
 }
@@ -740,7 +741,7 @@ function drawCovalentLabels() {
     if (bondFormed && bondProgress > 0.85) return;
     for (let a of atoms) {
         if (a.symbol === 'NONE') continue;
-        let maxShell = a.nativeMaxShell();
+        let maxShell = a.displayMaxShell();
         let baseY    = a.pos.y + SHELL_RADII[maxShell] + 16;
         let eCount   = a.effectiveValenceCount();
         let target   = a.data.nobleTarget;
@@ -824,6 +825,14 @@ class Atom {
         return this.data.config.length - 1;
     }
 
+    // Outermost shell actually shown: native config or a new shell created by an
+    // extra electron beyond the octet/duet.
+    displayMaxShell() {
+        let m = this.nativeMaxShell();
+        for (let e of this.electrons) if (e.shell > m) m = e.shell;
+        return m;
+    }
+
     valenceCount() {
         let vs = this.valenceShell();
         return vs < 0 ? 0 : this.electrons.filter(e => e.shell === vs).length;
@@ -879,7 +888,9 @@ class Atom {
     draw() {
         if (this.symbol === 'NONE') return;
 
-        let maxShell = this.nativeMaxShell();
+        // Capa más externa a dibujar: la nativa o, si un electrón extra ha
+        // iniciado una capa nueva, la de ese electrón.
+        let maxShell = this.displayMaxShell();
 
         noFill();
         strokeWeight(1);
@@ -1027,6 +1038,8 @@ class Atom {
 // PLACEHOLDER PARA SLOTS VACÍOS
 // ============================================================
 function drawEmptySlots() {
+    // Con un enlace formado no se ofrece añadir más átomos, aunque haya hueco.
+    if (bondFormed) return;
     const R = 44;
     for (let a of atoms) {
         if (a.symbol !== 'NONE') continue;
@@ -1054,7 +1067,7 @@ function drawAtomLabels() {
     if (bondFormed && bondProgress > 0.85) return;
     for (let a of atoms) {
         if (a.symbol === 'NONE') continue;
-        let maxShell = a.nativeMaxShell();
+        let maxShell = a.displayMaxShell();
         let baseY    = a.pos.y + SHELL_RADII[maxShell] + 16;
         let q        = a.netCharge;
         let qStr     = chargeStr(q);
@@ -1082,11 +1095,11 @@ function transferElectron(fromIdx, toIdx) {
     if (from.symbol === 'NONE' || to.symbol === 'NONE') return;
     if (from.electrons.length === 0) return;
 
-    // Si había un enlace, se deshace al ceder el electrón
+    // Si había un enlace, se deshace al ceder el electrón (separación fluida)
     if (bondFormed) {
         bondFormed   = false;
         bondProgress = 0;
-        resetAtomPositions();
+        resetAtomPositions(true);
         if (elResultCard) elResultCard.style('display', 'none');
     }
 
@@ -1096,7 +1109,18 @@ function transferElectron(fromIdx, toIdx) {
     if (eIdx < 0) return;
 
     let el      = from.electrons.splice(eIdx, 1)[0];
-    let toShell = to.electrons.length > 0 ? to.valenceShell() : 0;
+    // Capa destino: la de valencia, salvo que ya esté completa (octeto / dueto),
+    // en cuyo caso el electrón extra inicia una capa nueva.
+    let toShell;
+    if (to.electrons.length === 0) {
+        toShell = 0;
+    } else {
+        let vs       = to.valenceShell();
+        let capacity = vs === 0 ? 2 : 8;          // K=2, resto=8 (modelo de Bohr)
+        let countVs  = to.electrons.filter(e => e.shell === vs).length;
+        toShell = countVs >= capacity ? vs + 1 : vs;
+    }
+    toShell = min(toShell, SHELL_RADII.length - 1);
     el.shell       = toShell;
     el.radius      = SHELL_RADII[toShell];
     el.angle       = random(TWO_PI);
@@ -1289,8 +1313,11 @@ function setBtn(id, enabled) {
 function drawForces() {
     let atomCY = constrain(height * 0.44, 100, 230);
     let maxR   = maxElectronRadius(atoms);
-    // Keep force line clearly above the bond rect (which has top at atomCY - maxR - 24)
-    let lineY  = max(atomCY - maxR - 48, 14);
+    // rectTop = atomCY - maxR - 24.
+    // ✔ is drawn TOP-anchored at lineY+3, ~15px tall → bottom at lineY+18.
+    // We want gap between ✔-bottom and rectTop ≥ 20px → lineY ≤ rectTop - 38 = atomCY - maxR - 62.
+    // Floor of 28 ensures the label (BOTTOM-anchored at lineY-4, ~15px tall) stays inside the canvas.
+    let lineY  = max(atomCY - maxR - 62, 28);
 
     for (let i = 0; i < atoms.length - 1; i++) {
         let a1 = atoms[i], a2 = atoms[i + 1];
@@ -1371,41 +1398,53 @@ function drawBondEffect() {
     rect(minX, minY, maxX - minX, maxY - minY, 20);
 
     if (bondProgress > 0.75) {
-        let a3 = map(bondProgress, 0.75, 1, 0, 255);
-        let bx = width / 2, by = constrain(height * 0.82, height * 0.72, height - 38);
+        let a3  = map(bondProgress, 0.75, 1, 0, 255);
+        let cx  = width / 2;
+        let msg = currentMode === 'COVALENT' ? '¡Enlace covalente formado!' : '¡Enlace iónico formado!';
+        let showBtn = currentMode === 'IONIC' && bondProgress >= 0.98;
+
+        // Panel de éxito como UNA unidad: mensaje + (opcional) botón apilados y
+        // centrados horizontalmente. Se ancla justo bajo el recuadro verde y solo
+        // sube si fuese a salirse por abajo, de modo que nunca solape ni se corte.
+        const msgW = 300, msgH = 40;
+        const btnW = 214, btnH = 38;
+        const innerGap = 12;
+        let groupH = msgH + (showBtn ? innerGap + btnH : 0);
+
+        let groupTop = min(maxY + 18, height - 12 - groupH);
+        groupTop = max(groupTop, 12);
+
+        // — Mensaje de éxito (sin fondo) —
+        let msgTop = groupTop;
         noStroke();
-        fill(16, 185, 129, a3 * 0.18);
-        rect(bx - 180, by - 20, 360, 40, 10);
         fill(16, 185, 129, a3);
         textAlign(CENTER, CENTER);
         textSize(17);
         textStyle(BOLD);
-        let msg = currentMode === 'COVALENT' ? '¡Enlace covalente formado!' : '¡Enlace iónico formado!';
-        text(msg, bx, by);
+        text(msg, cx, msgTop + msgH / 2);
         textStyle(NORMAL);
 
-        // Botón "Ver red cristalina" — dibujado en canvas, solo en modo iónico
-        if (currentMode === 'IONIC' && bondProgress >= 0.98) {
-            const bW = 214, bH = 38;
-            const bBx = bx - bW / 2;
-            const bBy = constrain(by + 30, by + 30, height - bH - 10);
-            const hover = mouseX >= bBx && mouseX <= bBx + bW &&
-                          mouseY >= bBy && mouseY <= bBy + bH;
+        // — Botón "Ver red cristalina" (justo debajo del mensaje) —
+        if (showBtn) {
+            const bBx = cx - btnW / 2;
+            const bBy = msgTop + msgH + innerGap;
+            const hover = mouseX >= bBx && mouseX <= bBx + btnW &&
+                          mouseY >= bBy && mouseY <= bBy + btnH;
             noStroke();
             fill(16, 185, 129, hover ? 52 : 20);
-            rect(bBx, bBy, bW, bH, 99);
+            rect(bBx, bBy, btnW, btnH, 99);
             stroke(16, 185, 129, hover ? 230 : 120);
             strokeWeight(1.5);
             noFill();
-            rect(bBx, bBy, bW, bH, 99);
+            rect(bBx, bBy, btnW, btnH, 99);
             drawingContext.setLineDash([]);
             noStroke();
             fill(hover ? 236 : 16, hover ? 253 : 185, hover ? 245 : 129);
             textSize(12);
             textStyle(BOLD);
-            text('Ver red cristalina →', bx, bBy + bH / 2);
+            text('Ver red cristalina →', cx, bBy + btnH / 2);
             textStyle(NORMAL);
-            _crystalBtnBounds = { x: bBx, y: bBy, w: bW, h: bH };
+            _crystalBtnBounds = { x: bBx, y: bBy, w: btnW, h: btnH };
         } else {
             _crystalBtnBounds = null;
         }
@@ -1477,7 +1516,7 @@ function updateModeInfoCard(mode) {
     if (mode === 'IONIC') {
         content.innerHTML = `
             <p>Un <em>metal</em> cede electrones a un <em>no metal</em> — ambos alcanzan el octeto y quedan con cargas opuestas. La atracción de <b>Coulomb</b> entre iones forma el enlace.</p>
-            <p>Elige átomos, pulsa <em>Ceder e⁻</em> y observa la transferencia. Prueba <b>NaCl</b>, <b>MgCl₂</b> o <b>Na₂O</b>.</p>`;
+            <p>Elige átomos, pulsa <em>Ceder e⁻</em> y observa la transferencia.</p>`;
     } else if (mode === 'METALLIC') {
         content.innerHTML = `
             <p>Los metales ceden sus e⁻ de valencia a un <em>mar de electrones</em> deslocalizados que mantiene cohesionada la red de <b>cationes</b>.</p>
@@ -1518,6 +1557,7 @@ function enterIonicCrystal() {
     ionicShearAligned  = false;
     ionicGapOffset     = 0;
     ionicVibTime       = 0;
+    ionicShowElectrons = true;   // empezar con la vista de electrones activa
 
     let ctrlRow = document.getElementById('atom-controls-row');
     if (ctrlRow) ctrlRow.style.display = 'none';
@@ -1554,6 +1594,16 @@ function exitIonicCrystal() {
     if (frame) resizeCanvas(frame.offsetWidth, frame.offsetHeight);
 
     uiContainer.html('');
+    // Vaciar los contenedores antes de reconstruir para no duplicar controles.
+    ['ctrl-0', 'ctrl-1', 'ctrl-2'].forEach(id => {
+        let el = select(`#${id}`);
+        if (el) el.html('');
+    });
+    ['bond-01', 'bond-12'].forEach(id => {
+        let el = document.getElementById(id);
+        if (el) { el.innerHTML = ''; el.style.display = 'none'; }
+    });
+    atomSelects = [];
     buildIonicUI();
     updateUIState();
     if (bondFormed) checkBondFormed();
@@ -1754,7 +1804,7 @@ function buildIonicCrystalUI() {
     eChk.attribute('id', 'chk-electrons');
     eChk.style('width', '14px').style('height', '14px').style('cursor', 'pointer')
         .style('accent-color', 'var(--accent)');
-    eChk.elt.checked = false;
+    eChk.elt.checked = ionicShowElectrons;
     let eLbl = createElement('label', 'Ver electrones');
     eLbl.attribute('for', 'chk-electrons');
     eLbl.style('font-size', '11.5px').style('color', 'var(--text-label)')

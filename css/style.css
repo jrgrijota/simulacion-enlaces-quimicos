@@ -320,6 +320,7 @@ button:disabled { opacity: 0.28; cursor: not-allowed; }
     padding-bottom: 4px;
     border-bottom: 1px solid var(--border-main);
     flex-shrink: 0;
+    text-align: center;
 }
 
 .atom-ctrl select {
