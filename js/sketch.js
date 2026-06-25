@@ -1525,7 +1525,7 @@ function updateModeInfoCard(mode) {
     } else if (mode === 'METALLIC') {
         content.innerHTML = `
             <p>Los metales ceden sus e⁻ de valencia a un <em>mar de electrones</em> deslocalizados que mantiene cohesionada la red de <b>cationes</b>.</p>
-            <p>Usa <em>Aplicar voltaje</em> para ver la <b>conductividad</b> y <em>Deformar red</em> para la <b>maleabilidad</b>.</p>`;
+            <p>Usa <em>Aplicar voltaje</em> para ver la <b>conductividad</b> y <em>Deformar red</em> para la <b>maleabilidad</b>. Sube la <b>temperatura</b>: los iones vibran más, dispersan a los e⁻ y aumenta la <b>resistencia</b>.</p>`;
     } else if (mode === 'COVALENT') {
         content.innerHTML = `
             <p>Dos <em>no metales</em> comparten electrones de valencia. El par compartido orbita entre ambos núcleos y cuenta para el octeto de los dos átomos.</p>
@@ -2515,6 +2515,14 @@ function tempName() {
     return { txt: 'Muy caliente', col: '#EF4444' };
 }
 
+// La resistencia sigue a la temperatura: más vibración ⇒ más dispersión.
+function resistanceName() {
+    if (latticeTemp < 0.6) return { txt: 'Baja',     col: '#10B981' };
+    if (latticeTemp < 1.6) return { txt: 'Media',    col: '#FBBF24' };
+    if (latticeTemp < 2.4) return { txt: 'Alta',     col: '#F59E0B' };
+    return { txt: 'Muy alta', col: '#EF4444' };
+}
+
 function refreshTempLabel() {
     if (!elTempLabel) return;
     let t = tempName();
@@ -2532,11 +2540,16 @@ function refreshMetallicInfo() {
         deform:  `<span style="color:#F59E0B">↔ Deformando red</span>`,
     };
     const t = tempName();
+    const r = resistanceName();
+    const resLine = metallicPhase === 'voltage'
+        ? `<p>Resistencia: <b style="color:${r.col}">${r.txt}</b> <span style="opacity:.7">(sube con la temperatura)</span></p>`
+        : '';
     elMetallicInfo.html(`
         <p>Metal: <b><em style="color:${metal.color}">${metallicMetal}</em> — ${metal.name}</b></p>
         <p>Valencia: <b>${metal.valence} e⁻</b> por átomo · Catión <b>${metallicMetal}<sup>${metal.charge}+</sup></b></p>
         <p>e⁻ en el mar: <b>${numE}</b> · T. fusión: <b>${metal.mp} °C</b></p>
         <p>Temperatura: <b style="color:${t.col}">${t.txt}</b></p>
+        ${resLine}
         <p>Estado: ${phaseMap[metallicPhase] || '—'}</p>
     `);
 }
@@ -2574,10 +2587,17 @@ function latticeIonPos(atom) {
     return { x: ax, y: ay };
 }
 
-// Atracción débil del electrón hacia el catión más cercano: es la "cola" del
-// enlace metálico (los e⁻ deslocalizados son atraídos por los cores positivos).
-// Con la inercia que ya llevan, los electrones serpentean entre los iones.
-function applyIonAttraction(e) {
+// Rapidez térmica de referencia y probabilidad de dispersión: ambas crecen con
+// la temperatura (red más caliente ⇒ choques más frecuentes ⇒ más resistencia).
+function thermalSpeed() { return 0.8 + latticeTemp * 0.35; }
+function scatterProb()  { return 0.10 + latticeTemp * 0.06; }
+
+// Interacción del electrón con la red en una sola pasada:
+//  · Atracción hacia el catión más cercano → cohesión del enlace metálico.
+//  · Dispersión al pasar junto a un core → ORIGEN de la resistencia (modelo de
+//    Drude). Al chocar, la velocidad se re-aleatoriza y se borra la deriva
+//    acumulada. La sección de choque crece con la vibración térmica (∝ T).
+function interactWithIons(e) {
     let bdx = 0, bdy = 0, bestD2 = Infinity;
     for (let atom of latticeAtoms) {
         let p  = latticeIonPos(atom);
@@ -2586,10 +2606,19 @@ function applyIonAttraction(e) {
         if (d2 < bestD2) { bestD2 = d2; bdx = dx; bdy = dy; }
     }
     let d = Math.sqrt(bestD2);
-    if (d < 1) return;
-    const F = 0.04;                 // intensidad suave de cohesión
-    e.vx += (bdx / d) * F;
-    e.vy += (bdy / d) * F;
+    if (d >= 1) {
+        const F = 0.04;                 // cohesión suave
+        e.vx += (bdx / d) * F;
+        e.vy += (bdy / d) * F;
+    }
+    // Colisión con el core: re-aleatoriza la velocidad (pierde la deriva).
+    let rs = latticeSpacing * 0.22 + thermalAmplitude();
+    if (d < rs && random() < scatterProb()) {
+        let ang = random(TWO_PI);
+        let s   = thermalSpeed() * random(0.7, 1.3);
+        e.vx = Math.cos(ang) * s;
+        e.vy = Math.sin(ang) * s;
+    }
 }
 
 function updateMetallicElectrons() {
@@ -2599,21 +2628,23 @@ function updateMetallicElectrons() {
     const minY = latticeStartY - pad;
     const maxY = latticeStartY + (LATTICE_ROWS - 1) * latticeSpacing + pad;
 
-    for (let e of freeElectrons) {
-        applyIonAttraction(e);      // cohesión catión–electrón
+    const field  = (metallicPhase === 'voltage') ? 0.07 : 0;  // empuje del campo (+x)
+    const maxSpd = 2.6 + latticeTemp * 0.3;
 
-        if (metallicPhase === 'voltage') {
-            e.vx += 0.045;
-            if (e.vx > 2.8) e.vx = 2.8;
-        } else {
-            if (random() < 0.012) {
-                e.vx += random(-0.4, 0.4);
-                e.vy += random(-0.4, 0.4);
-            }
-            let spd = sqrt(e.vx * e.vx + e.vy * e.vy);
-            if (spd > 2.2) { e.vx = e.vx / spd * 2.2; e.vy = e.vy / spd * 2.2; }
-            if (spd < 0.3) { e.vx *= 1.3; e.vy *= 1.3; }
+    for (let e of freeElectrons) {
+        // El campo eléctrico acelera la deriva entre colisiones
+        e.vx += field;
+        // Agitación térmica de fondo
+        if (random() < 0.012) {
+            e.vx += random(-0.4, 0.4);
+            e.vy += random(-0.4, 0.4);
         }
+        // Atracción + dispersión contra la red
+        interactWithIons(e);
+        // Límite de rapidez
+        let spd = Math.sqrt(e.vx * e.vx + e.vy * e.vy);
+        if (spd > maxSpd) { e.vx = e.vx / spd * maxSpd; e.vy = e.vy / spd * maxSpd; }
+        if (spd < 0.3)    { e.vx *= 1.3; e.vy *= 1.3; }
 
         e.x += e.vx;
         e.y += e.vy;
