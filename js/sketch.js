@@ -2512,6 +2512,32 @@ function drawMetallic() {
     drawMetallicOverlay();
 }
 
+// Posición real (dibujada) de un catión de la red, teniendo en cuenta la
+// cizalladura. Centraliza el cálculo para dibujo e interacción con los electrones.
+function latticeIonPos(atom) {
+    let ax = atom.baseX;
+    if (metallicPhase === 'deform' && atom.row < 2) ax += deformOffset;
+    return { x: ax, y: atom.y };
+}
+
+// Atracción débil del electrón hacia el catión más cercano: es la "cola" del
+// enlace metálico (los e⁻ deslocalizados son atraídos por los cores positivos).
+// Con la inercia que ya llevan, los electrones serpentean entre los iones.
+function applyIonAttraction(e) {
+    let bdx = 0, bdy = 0, bestD2 = Infinity;
+    for (let atom of latticeAtoms) {
+        let p  = latticeIonPos(atom);
+        let dx = p.x - e.x, dy = p.y - e.y;
+        let d2 = dx * dx + dy * dy;
+        if (d2 < bestD2) { bestD2 = d2; bdx = dx; bdy = dy; }
+    }
+    let d = Math.sqrt(bestD2);
+    if (d < 1) return;
+    const F = 0.04;                 // intensidad suave de cohesión
+    e.vx += (bdx / d) * F;
+    e.vy += (bdy / d) * F;
+}
+
 function updateMetallicElectrons() {
     const pad  = latticeSpacing * 0.65;
     const minX = latticeStartX - pad;
@@ -2520,6 +2546,8 @@ function updateMetallicElectrons() {
     const maxY = latticeStartY + (LATTICE_ROWS - 1) * latticeSpacing + pad;
 
     for (let e of freeElectrons) {
+        applyIonAttraction(e);      // cohesión catión–electrón
+
         if (metallicPhase === 'voltage') {
             e.vx += 0.045;
             if (e.vx > 2.8) e.vx = 2.8;
@@ -2588,25 +2616,25 @@ function drawLatticeAtoms() {
     const sup     = metal.charge === 1 ? '+' : metal.charge + '+';
 
     for (let atom of latticeAtoms) {
-        let ax = atom.baseX;
-        if (metallicPhase === 'deform' && atom.row < 2) ax += deformOffset;
+        let ip = latticeIonPos(atom);
+        let ax = ip.x, ay = ip.y;
 
         // Órbita (punteada)
         noFill();
         stroke(cR, cG, cB, 28);
         strokeWeight(1);
         drawingContext.setLineDash([3, 4]);
-        ellipse(ax, atom.y, orbitR * 2, orbitR * 2);
+        ellipse(ax, ay, orbitR * 2, orbitR * 2);
         drawingContext.setLineDash([]);
 
         // Halo
         noStroke();
         fill(cR, cG, cB, 16);
-        circle(ax, atom.y, nucSize + 12);
+        circle(ax, ay, nucSize + 12);
 
         // Núcleo
         fill(cR, cG, cB, 215);
-        circle(ax, atom.y, nucSize);
+        circle(ax, ay, nucSize);
 
         // Símbolo + carga
         fill('#0F172A');
@@ -2620,9 +2648,9 @@ function drawLatticeAtoms() {
         let supW  = textWidth(sup);
         let tX    = ax - (symW + supW + 1) / 2;
         textSize(symSize);
-        text(metallicMetal, tX, atom.y);
+        text(metallicMetal, tX, ay);
         textSize(supSize);
-        text(sup, tX + symW + 1, atom.y - max(nucSize * 0.11, 4));
+        text(sup, tX + symW + 1, ay - max(nucSize * 0.11, 4));
         textStyle(NORMAL);
         textAlign(CENTER, CENTER);
     }
