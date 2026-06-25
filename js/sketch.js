@@ -2640,7 +2640,7 @@ function updateMetallicElectrons() {
     const minY = latticeStartY - pad;
     const maxY = latticeStartY + (LATTICE_ROWS - 1) * latticeSpacing + pad;
 
-    const field  = (metallicPhase === 'voltage') ? 0.07 : 0;  // empuje del campo (+x)
+    const field  = (metallicPhase === 'voltage') ? 0.05 : 0;  // empuje del campo (+x)
     const maxSpd = 2.6 + latticeTemp * 0.3;
 
     // El mar re-apantalla la red al deformarla: los e⁻ por encima del plano de
@@ -2673,11 +2673,9 @@ function updateMetallicElectrons() {
         e.x += e.vx;
         e.y += e.vy;
 
-        if (metallicPhase === 'voltage') {
-            if (e.x > maxX) e.x = minX;
-            if (e.x < minX) e.x = maxX;
-            if (e.y < minY || e.y > maxY) { e.vy *= -1; e.y = constrain(e.y, minY, maxY); }
-        } else {
+        // Rebote elástico en todas las paredes, también bajo voltaje: un electrón
+        // nunca cruza de un lado al otro (nada de wraparound/teletransporte).
+        {
             if (e.x < minX || e.x > maxX) { e.vx *= -1; e.x = constrain(e.x, minX, maxX); }
             if (e.y < minY || e.y > maxY) { e.vy *= -1; e.y = constrain(e.y, minY, maxY); }
         }
