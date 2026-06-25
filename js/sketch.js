@@ -59,6 +59,7 @@ let metallicPhase  = 'normal'; // 'normal' | 'voltage' | 'deform'
 let deformOffset   = 0;
 let deformTarget   = 0;
 let deformDone     = false;
+let deformPrev     = 0;     // cizalla del frame anterior (para arrastrar el mar)
 let latticeSpacing = 85;
 let latticeStartX  = 0;
 let latticeStartY  = 0;
@@ -276,6 +277,7 @@ function initSimulation() {
     deformOffset   = 0;
     deformTarget   = 0;
     deformDone     = false;
+    deformPrev     = 0;
     elBtnVoltage        = null;
     elBtnDeform         = null;
     elMetallicInfo      = null;
@@ -2396,7 +2398,7 @@ function buildMetallicUI() {
     resetBtn.mousePressed(() => {
         if (metallicMetalSel) metallicMetal = metallicMetalSel.value();
         metallicPhase = 'normal';
-        deformOffset  = 0; deformTarget = 0; deformDone = false;
+        deformOffset  = 0; deformTarget = 0; deformDone = false; deformPrev = 0;
         initMetallicSimulation();
         if (elBtnVoltage) elBtnVoltage.html('⚡ Aplicar voltaje');
         if (elBtnDeform)  elBtnDeform.html('↔ Deformar red');
@@ -2418,7 +2420,7 @@ function buildMetallicUI() {
     metallicMetalSel.changed(() => {
         metallicMetal = metallicMetalSel.value();
         metallicPhase = 'normal';
-        deformOffset  = 0; deformTarget = 0; deformDone = false;
+        deformOffset  = 0; deformTarget = 0; deformDone = false; deformPrev = 0;
         initMetallicSimulation();
         if (elBtnVoltage) elBtnVoltage.html('⚡ Aplicar voltaje');
         if (elBtnDeform)  elBtnDeform.html('↔ Deformar red');
@@ -2455,7 +2457,7 @@ function buildMetallicUI() {
             elBtnVoltage.html('⚡ Aplicar voltaje');
         } else {
             metallicPhase = 'voltage';
-            deformOffset  = 0; deformTarget = 0; deformDone = false;
+            deformOffset  = 0; deformTarget = 0; deformDone = false; deformPrev = 0;
             for (let e of freeElectrons) {
                 e.vx = random(0.8, 2.2); e.vy = random(-0.5, 0.5);
             }
@@ -2471,7 +2473,7 @@ function buildMetallicUI() {
     elBtnDeform.mousePressed(() => {
         if (metallicPhase === 'deform') {
             metallicPhase = 'normal';
-            deformOffset  = 0; deformTarget = 0; deformDone = false;
+            deformOffset  = 0; deformTarget = 0; deformDone = false; deformPrev = 0;
             elBtnDeform.html('↔ Deformar red');
         } else {
             metallicPhase = 'deform';
@@ -2630,6 +2632,18 @@ function updateMetallicElectrons() {
 
     const field  = (metallicPhase === 'voltage') ? 0.07 : 0;  // empuje del campo (+x)
     const maxSpd = 2.6 + latticeTemp * 0.3;
+
+    // El mar re-apantalla la red al deformarla: los e⁻ por encima del plano de
+    // cizalla acompañan el desplazamiento de los cationes. Esto es JUSTO la razón
+    // de la maleabilidad: el mar no direccional se reacomoda sin romperse.
+    const dDeform = deformOffset - deformPrev;
+    const shearY  = latticeStartY + latticeSpacing * 1.5;
+    if (dDeform !== 0) {
+        for (let e of freeElectrons) {
+            if (e.y < shearY) e.x += dDeform;
+        }
+    }
+    deformPrev = deformOffset;
 
     for (let e of freeElectrons) {
         // El campo eléctrico acelera la deriva entre colisiones
