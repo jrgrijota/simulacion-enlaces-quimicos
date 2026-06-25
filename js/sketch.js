@@ -62,9 +62,12 @@ let deformDone     = false;
 let latticeSpacing = 85;
 let latticeStartX  = 0;
 let latticeStartY  = 0;
+let latticeTemp    = 1;     // 0=frío … 3=caliente — amplitud de vibración térmica
 let elBtnVoltage   = null;
 let elBtnDeform    = null;
 let elMetallicInfo = null;
+let elTempSlider   = null;
+let elTempLabel    = null;
 
 // Ionic crystal lattice state
 let ionicCrystalMode      = false;
@@ -276,6 +279,8 @@ function initSimulation() {
     elBtnVoltage        = null;
     elBtnDeform         = null;
     elMetallicInfo      = null;
+    elTempSlider        = null;
+    elTempLabel         = null;
     ionicCrystalMode    = false;
     ionicCrystalPhase   = 'normal';
     ionicShearOffset    = 0;
@@ -2354,8 +2359,10 @@ function initMetallicSimulation() {
         for (let c = 0; c < LATTICE_COLS; c++) {
             latticeAtoms.push({
                 baseX: latticeStartX + c * latticeSpacing,
+                baseY: latticeStartY + r * latticeSpacing,
                 y:     latticeStartY + r * latticeSpacing,
                 row: r, col: c,
+                phase: random(TWO_PI),   // fase propia de vibración térmica
             });
         }
     }
@@ -2480,7 +2487,39 @@ function buildMetallicUI() {
     actCard.child(actBody);
     uiContainer.child(actCard);
 
+    // Temperatura de la red
+    let tempCard = createDiv().class('card');
+    tempCard.child(createDiv('Temperatura de la red').class('atom-card-label'));
+    let tempBody = createDiv().class('card-body-static');
+    elTempSlider = createSlider(0, 3, latticeTemp, 0.1);
+    elTempSlider.style('width', '100%');
+    elTempSlider.input(() => {
+        latticeTemp = parseFloat(elTempSlider.value());
+        refreshTempLabel();
+        refreshMetallicInfo();
+    });
+    tempBody.child(elTempSlider);
+    elTempLabel = createDiv().class('info-section');
+    tempBody.child(elTempLabel);
+    tempCard.child(tempBody);
+    uiContainer.child(tempCard);
+    refreshTempLabel();
+
     refreshMetallicInfo();
+}
+
+function tempName() {
+    if (latticeTemp < 0.6) return { txt: 'Fría',     col: '#38BDF8' };
+    if (latticeTemp < 1.6) return { txt: 'Templada', col: '#10B981' };
+    if (latticeTemp < 2.4) return { txt: 'Caliente', col: '#FBBF24' };
+    return { txt: 'Muy caliente', col: '#EF4444' };
+}
+
+function refreshTempLabel() {
+    if (!elTempLabel) return;
+    let t = tempName();
+    elTempLabel.html(`<p>Estado térmico: <b style="color:${t.col}">${t.txt}</b><br>
+        Los cationes vibran en torno a su posición de equilibrio.</p>`);
 }
 
 function refreshMetallicInfo() {
@@ -2492,10 +2531,12 @@ function refreshMetallicInfo() {
         voltage: `<span style="color:#FBBF24">⚡ Voltaje aplicado</span>`,
         deform:  `<span style="color:#F59E0B">↔ Deformando red</span>`,
     };
+    const t = tempName();
     elMetallicInfo.html(`
         <p>Metal: <b><em style="color:${metal.color}">${metallicMetal}</em> — ${metal.name}</b></p>
         <p>Valencia: <b>${metal.valence} e⁻</b> por átomo · Catión <b>${metallicMetal}<sup>${metal.charge}+</sup></b></p>
         <p>e⁻ en el mar: <b>${numE}</b> · T. fusión: <b>${metal.mp} °C</b></p>
+        <p>Temperatura: <b style="color:${t.col}">${t.txt}</b></p>
         <p>Estado: ${phaseMap[metallicPhase] || '—'}</p>
     `);
 }
@@ -2512,12 +2553,25 @@ function drawMetallic() {
     drawMetallicOverlay();
 }
 
-// Posición real (dibujada) de un catión de la red, teniendo en cuenta la
-// cizalladura. Centraliza el cálculo para dibujo e interacción con los electrones.
+// Amplitud (px) de la vibración térmica de los cores en torno a su equilibrio.
+// Crece con la temperatura: a más T, más oscilan los iones.
+function thermalAmplitude() {
+    return latticeTemp * latticeSpacing * 0.05;
+}
+
+// Posición real (dibujada) de un catión de la red: equilibrio + cizalladura +
+// vibración térmica. Centraliza el cálculo para dibujo e interacción con los e⁻.
 function latticeIonPos(atom) {
     let ax = atom.baseX;
     if (metallicPhase === 'deform' && atom.row < 2) ax += deformOffset;
-    return { x: ax, y: atom.y };
+    let ay  = atom.baseY;
+    let amp = thermalAmplitude();
+    if (amp > 0.01) {
+        let t = frameCount * 0.16;
+        ax += Math.cos(t + atom.phase) * amp;
+        ay += Math.sin(t * 1.17 + atom.phase * 1.6) * amp;
+    }
+    return { x: ax, y: ay };
 }
 
 // Atracción débil del electrón hacia el catión más cercano: es la "cola" del
