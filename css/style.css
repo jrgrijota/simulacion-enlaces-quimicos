@@ -380,6 +380,16 @@ button:disabled { opacity: 0.28; cursor: not-allowed; }
     background: rgba(59, 130, 246, 0.08);
 }
 
+.bond-dative-btn {
+    border-color: #E879F9;
+    color: #E879F9;
+    background: rgba(232, 121, 249, 0.08);
+    margin-top: 4px;
+}
+.bond-dative-btn:hover:not(:disabled) {
+    background: rgba(232, 121, 249, 0.16);
+}
+
 .bond-recover-btn {
     border-color: var(--border-strong);
     color: var(--text-muted);

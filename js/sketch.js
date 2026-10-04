@@ -512,6 +512,12 @@ function buildCovalentUI() {
     btn01.class('bond-connector-btn');
     btn01.mousePressed(() => shareElectron(0, 1));
     conn01.child(btn01);
+    let dat01 = createButton('');
+    dat01.elt.innerHTML = '<span style="font-size:13px">→</span><br>Dativo';
+    dat01.id('btn-dat-01');
+    dat01.class('bond-connector-btn bond-dative-btn');
+    dat01.mousePressed(() => shareElectronDative(0, 1));
+    conn01.child(dat01);
     let rec01 = createButton('');
     rec01.elt.innerHTML = '<span style="font-size:11px">↩</span><br>Recuperar';
     rec01.id('btn-rec-01');
@@ -527,6 +533,12 @@ function buildCovalentUI() {
     btn12.class('bond-connector-btn');
     btn12.mousePressed(() => shareElectron(1, 2));
     conn12.child(btn12);
+    let dat12 = createButton('');
+    dat12.elt.innerHTML = '<span style="font-size:13px">→</span><br>Dativo';
+    dat12.id('btn-dat-12');
+    dat12.class('bond-connector-btn bond-dative-btn');
+    dat12.mousePressed(() => shareElectronDative(1, 2));
+    conn12.child(dat12);
     let rec12 = createButton('');
     rec12.elt.innerHTML = '<span style="font-size:11px">↩</span><br>Recuperar';
     rec12.id('btn-rec-12');
@@ -608,10 +620,12 @@ function unshareElectron(idxA, idxB) {
     let bond = covalentBonds[bondIdx];
     bond.eA.shared     = false;
     bond.eA.sharedWith = undefined;
+    bond.eA.dative     = false;
     bond.eA.color      = bond.eA.baseColor;
     if (bond.eA._origSpeed !== undefined) { bond.eA.speed = bond.eA._origSpeed; delete bond.eA._origSpeed; }
     bond.eB.shared     = false;
     bond.eB.sharedWith = undefined;
+    bond.eB.dative     = false;
     bond.eB.color      = bond.eB.baseColor;
     if (bond.eB._origSpeed !== undefined) { bond.eB.speed = bond.eB._origSpeed; delete bond.eB._origSpeed; }
     covalentBonds.splice(bondIdx, 1);
@@ -648,6 +662,73 @@ function canShareCovalent(idxA, idxB) {
     let freeA = atomA.electrons.some(e => e.shell === vsA && !e.shared);
     let freeB = atomB.electrons.some(e => e.shell === vsB && !e.shared);
     return freeA && freeB;
+}
+
+// ----- ENLACE DATIVO (COORDINADO) -----
+// A diferencia del covalente normal, el par compartido lo aporta ENTERO un solo
+// átomo (el dador, desde un par solitario); el otro (el aceptor) solo pone un
+// orbital vacío. Ej.: en el SO₂, el azufre cede un par a uno de los oxígenos (S→O).
+
+// Decide quién es dador (tiene par solitario libre) y quién aceptor (le faltan
+// exactamente 2 e⁻ para el octeto). Devuelve {donor, acceptor} o null.
+function resolveDative(idxA, idxB) {
+    let a = atoms[idxA], b = atoms[idxB];
+    if (!a || !b) return null;
+    if (a.symbol === 'NONE' || b.symbol === 'NONE') return null;
+    if (bondFormed) return null;
+    // Prueba cada átomo como dador; prioriza la dirección idxA→idxB.
+    for (let [dIdx, accIdx] of [[idxA, idxB], [idxB, idxA]]) {
+        let donor = atoms[dIdx], acc = atoms[accIdx];
+        let vsD   = donor.nativeMaxShell();
+        let freeD = donor.electrons.filter(e => e.shell === vsD && !e.shared).length;
+        let accNeed = acc.data.nobleTarget - acc.effectiveValenceCount();
+        if (freeD >= 2 && accNeed >= 2) return { donor: dIdx, acceptor: accIdx };
+    }
+    return null;
+}
+
+function canShareDative(idxA, idxB) {
+    return resolveDative(idxA, idxB) !== null;
+}
+
+function shareElectronDative(idxA, idxB) {
+    if (bondFormed) return;
+    let res = resolveDative(idxA, idxB);
+    if (!res) return;
+    let { donor, acceptor } = res;
+    let donorA = atoms[donor];
+
+    // El dador aporta DOS electrones (un par solitario) de su capa de valencia.
+    let vsD    = donorA.nativeMaxShell();
+    let freeEs = donorA.electrons.filter(e => e.shell === vsD && !e.shared);
+    if (freeEs.length < 2) return;
+    let eD1 = freeEs[0], eD2 = freeEs[1];
+
+    // Ambos quedan compartidos CON EL ACEPTOR (que así suma +2 en su octeto).
+    eD1.shared = true; eD1.sharedWith = acceptor; eD1.dative = true; eD1.angle = random(TWO_PI);
+    eD2.shared = true; eD2.sharedWith = acceptor; eD2.dative = true; eD2.angle = eD1.angle + PI;
+    const sharedSpeed = (eD1.speed + eD2.speed) * 0.5;
+    eD1._origSpeed = eD1.speed; eD1.speed = sharedSpeed;
+    eD2._origSpeed = eD2.speed; eD2.speed = sharedSpeed;
+    covalentBonds.push({ atomA: donor, atomB: acceptor, eA: eD1, eB: eD2, dative: true, donor, acceptor });
+
+    // Acercar el átomo exterior hacia el central (índice 1), igual que en el covalente.
+    let outerIdx = (idxA === 1) ? idxB : idxA;
+    let innerIdx = (idxA === 1) ? idxA : idxB;
+    let dTarget  = covalentBondDist(outerIdx, innerIdx);
+    let ddx = atoms[outerIdx].pos.x - atoms[innerIdx].pos.x;
+    let ddy = atoms[outerIdx].pos.y - atoms[innerIdx].pos.y;
+    let dist = Math.sqrt(ddx * ddx + ddy * ddy);
+    if (dist > 0) {
+        let nx = ddx / dist, ny = ddy / dist;
+        atoms[outerIdx].targetPos = createVector(
+            atoms[innerIdx].pos.x + nx * dTarget,
+            atoms[innerIdx].pos.y + ny * dTarget
+        );
+    }
+
+    updateUIState();
+    checkCovalentBondFormed();
 }
 
 function checkCovalentBondFormed() {
@@ -720,15 +801,34 @@ function drawCovalentLenses() {
         push();
         translate(cx, cy);
         rotate(ang);
-        // Relleno muy tenue
-        noStroke();
-        fill(232, 121, 249, 22);
-        ellipse(0, 0, semi * 2, h * 2);
-        // Borde sutil
-        noFill();
-        stroke(232, 121, 249, 55);
-        strokeWeight(1);
-        ellipse(0, 0, semi * 2, h * 2);
+        if (bond.dative) {
+            // Enlace dativo: lenteja tintada con el color del dador + flecha dador→aceptor.
+            let dc = atoms[bond.donor] ? color(atoms[bond.donor].data.color) : color(232, 121, 249);
+            noStroke();
+            fill(red(dc), green(dc), blue(dc), 30);
+            ellipse(0, 0, semi * 2, h * 2);
+            noFill();
+            stroke(red(dc), green(dc), blue(dc), 90);
+            strokeWeight(1);
+            ellipse(0, 0, semi * 2, h * 2);
+            // Flecha a lo largo del eje de enlace, apuntando al aceptor (+x local).
+            let tip = semi * 0.95;
+            stroke(red(dc), green(dc), blue(dc), 230);
+            strokeWeight(1.6);
+            line(-semi * 0.95, 0, tip, 0);
+            line(tip, 0, tip - 5, -4);
+            line(tip, 0, tip - 5,  4);
+        } else {
+            // Relleno muy tenue
+            noStroke();
+            fill(232, 121, 249, 22);
+            ellipse(0, 0, semi * 2, h * 2);
+            // Borde sutil
+            noFill();
+            stroke(232, 121, 249, 55);
+            strokeWeight(1);
+            ellipse(0, 0, semi * 2, h * 2);
+        }
         pop();
     }
 }
@@ -862,8 +962,9 @@ class Atom {
             // Electrones compartidos recorren la lemniscata algo más rápido
             e.angle += (currentMode === 'COVALENT' && e.shared) ? e.speed * 1.6 : e.speed;
             if (currentMode === 'COVALENT') {
-                // Electrón compartido: color neutro distinto de ambos átomos
-                e.color = e.shared ? _COVALENT_COLOR_OBJ : e.baseColorObj;
+                // Covalente: color neutro distinto de ambos átomos.
+                // Dativo: ambos e⁻ conservan el color del dador (se ve de dónde salen).
+                e.color = e.shared ? (e.dative ? e.baseColorObj : _COVALENT_COLOR_OBJ) : e.baseColorObj;
             } else {
                 if (bondFormed) {
                     let t      = min(bondProgress * 1.6, 1);
@@ -1253,6 +1354,8 @@ function updateUIStateCovalent() {
     if (conn12) conn12.style.display = both12 ? 'flex' : 'none';
     setBtn('btn-cov-01', canShareCovalent(0, 1));
     setBtn('btn-cov-12', canShareCovalent(1, 2));
+    setBtn('btn-dat-01', canShareDative(0, 1));
+    setBtn('btn-dat-12', canShareDative(1, 2));
     setBtn('btn-rec-01', canRecoverCovalent(0, 1));
     setBtn('btn-rec-12', canRecoverCovalent(1, 2));
 }
@@ -1485,7 +1588,8 @@ function updateModeInfoCard(mode) {
     } else if (mode === 'COVALENT') {
         content.innerHTML = `
             <p>Dos <em>no metales</em> comparten electrones de valencia. El par compartido orbita entre ambos núcleos y cuenta para el octeto de los dos átomos.</p>
-            <p>Pulsa <em>Compartir</em> en cada ranura. Prueba <b>H₂</b>, <b>Cl₂</b>, <b>HCl</b> o <b>H₂O</b> (A=H, B=O, C=H).</p>`;
+            <p>Pulsa <em>Compartir</em> en cada ranura. Prueba <b>H₂</b>, <b>Cl₂</b>, <b>HCl</b> o <b>H₂O</b> (A=H, B=O, C=H).</p>
+            <p>En el <em>enlace dativo</em> (→) el par lo aporta <b>un solo átomo</b> (el dador, desde un par solitario) y el otro pone un orbital vacío. Monta el <b>SO₂</b> (A=O, B=S, C=O): doble enlace <em>Compartir</em> en O=S y <em>Dativo</em> en S→O.</p>`;
     } else {
         content.innerHTML = `<p>Selecciona un modo para comenzar.</p>`;
     }
