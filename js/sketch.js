@@ -1531,6 +1531,11 @@ function drawBondEffect() {
     }
 }
 
+// Giro y selección en la celda 3D (js/crystal-3d.js)
+function mousePressed()  { ionic3DMousePressed(); }
+function mouseDragged()  { return ionic3DMouseDragged(); }
+function mouseReleased() { ionic3DMouseReleased(); }
+
 function mouseClicked() {
     if (ionicCrystalMode) {
         if (_crystalBackBtnBounds) {
@@ -1625,6 +1630,9 @@ function enterIonicCrystal() {
     );
     if (!ionicStructure) return;
     ionicLayer = buildCrystalLayer(ionicStructure);
+    ionicView  = '3d';
+    ionic3DAutoRotate = true;
+    initIonicCrystal3D();
 
     ionicCatSym    = cation.symbol;
     ionicCatColor  = cation.data.color;
@@ -1790,6 +1798,75 @@ function initIonicCrystalGrid() {
 }
 
 function buildIonicCrystalUI() {
+    uiContainer.html('');
+
+    // Selector de vista: celda unidad 3D o capa 2D con experimentos
+    let vCard = createDiv().class('card');
+    vCard.child(createDiv('Vista').class('atom-card-label'));
+    let vBody = createDiv().class('card-body-static');
+    let vRow  = createDiv();
+    vRow.style('display', 'flex').style('gap', '6px');
+    for (const [id, lbl] of [['3d', '🧊 Celda 3D'], ['2d', '▦ Capa 2D']]) {
+        let b = createButton(lbl);
+        if (ionicView === id) b.class('btn-primary');
+        b.style('flex', '1');
+        b.mousePressed(() => setIonicView(id));
+        vRow.child(b);
+    }
+    vBody.child(vRow);
+    vCard.child(vBody);
+    uiContainer.child(vCard);
+
+    if (ionicView === '3d') buildIonicCrystal3DControls();
+    else                    buildIonicCrystal2DControls();
+}
+
+function setIonicView(view) {
+    if (ionicView === view) return;
+    ionicView = view;
+    // Al cambiar de vista se parte de la red en reposo
+    ionicCrystalPhase = 'normal';
+    ionicShearOffset  = 0;
+    ionicShearAligned = false;
+    ionicGapOffset    = 0;
+    ionicShowShearForces = false;
+    ionicShowElectrons   = false;
+    selectIonic3DIon(-1);
+    buildIonicCrystalUI();
+    if (!isLooping()) redraw();
+}
+
+function buildIonicCrystal3DControls() {
+    let fCard = createDiv().class('card');
+    let fBody = createDiv().class('card-body-static');
+    fCard.child(createDiv('Visualización').class('atom-card-label'));
+    fCard.child(fBody);
+
+    let rLabel = createDiv();
+    rLabel.style('display', 'flex').style('align-items', 'center').style('gap', '8px')
+          .style('cursor', 'pointer').style('padding', '2px 0');
+    elChkAutoRotate = createElement('input');
+    elChkAutoRotate.attribute('type', 'checkbox');
+    elChkAutoRotate.attribute('id', 'chk-autorotate');
+    elChkAutoRotate.style('width', '14px').style('height', '14px').style('cursor', 'pointer')
+                   .style('accent-color', 'var(--accent)');
+    elChkAutoRotate.elt.checked = ionic3DAutoRotate;
+    let rLbl = createElement('label', 'Giro automático');
+    rLbl.attribute('for', 'chk-autorotate');
+    rLbl.style('font-size', '11.5px').style('color', 'var(--text-label)')
+        .style('cursor', 'pointer').style('user-select', 'none');
+    rLabel.child(elChkAutoRotate); rLabel.child(rLbl);
+    fBody.child(rLabel);
+    elChkAutoRotate.elt.addEventListener('change', () => { ionic3DAutoRotate = elChkAutoRotate.elt.checked; });
+
+    let hint = createDiv('Los experimentos de voltaje y cizalladura están en la vista <b>Capa 2D</b>.');
+    hint.style('font-size', '10.5px').style('color', 'var(--text-muted)').style('margin-top', '6px');
+    fBody.child(hint);
+
+    uiContainer.child(fCard);
+}
+
+function buildIonicCrystal2DControls() {
     // Experimentos
     let expCard = createDiv().class('card');
     expCard.child(createDiv('Experimentos').class('atom-card-label'));
@@ -1914,6 +1991,11 @@ function buildIonicCrystalUI() {
 
 // ── Bucle principal ───────────────────────────────────────────
 function drawIonicCrystal() {
+    if (ionicView === '3d') {
+        drawIonicCrystal3D(); // js/crystal-3d.js
+        drawIonicCrystalButtons();
+        return;
+    }
     updateIonicCrystalPhysics();
     drawIonicCrystalBg();
     drawIonicCoulombLines();

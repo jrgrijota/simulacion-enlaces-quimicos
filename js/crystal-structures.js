@@ -186,7 +186,7 @@ const CRYSTAL_STRUCTURE_TYPES = {
             return {
                 cellType: 'hexagonal', a, c, sites3D,
                 // Dos láminas completas X–M–X con el hueco entre ellas
-                range3D: [[0, 3], [0, 3], [-1 / 12, 5 / 12]],
+                range3D: [[0, 2], [0, 2], [-1 / 12, 5 / 12]],
                 layer: _layerCdCl2(a, c),
             };
         },
