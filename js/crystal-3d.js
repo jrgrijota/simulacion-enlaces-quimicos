@@ -7,8 +7,9 @@
 // en una partícula resalta su entorno.
 //
 // El visor dibuja una "escena" genérica:
-//   atoms   [{ x, y, z, sp, ox?, oy?, oz? }]  (Å; z vertical;
-//           o* = desplazamiento opcional, p. ej. vibración térmica)
+//   atoms   [{ x, y, z, sp, ox?, oy?, oz?, hidden? }]  (Å; z vertical;
+//           o* = desplazamiento opcional, p. ej. vibración térmica;
+//           hidden: no se dibuja, p. ej. una partícula de gas que se aleja)
 //   bonds   [{ i, j, d0, weak? }]   weak: unión débil (discontinua)
 //   edges   [[p, q]]                aristas de la celda
 //   species { clave: { sym, sup, color, r, label } }  r: radio dibujado (Å)
@@ -116,7 +117,10 @@ function drawCrystal3D() {
 
     // Enlaces y esferas, del fondo hacia delante
     const items = [];
+    // Visible: no oculta y delante de la cámara
+    const vis = i => !atoms[i].hidden && crystal3DProj[i].f > 0.2;
     for (const b of sc.bonds) {
+        if (!vis(b.i) || !vis(b.j)) continue;
         // Un enlace estirado se debilita y acaba desapareciendo (se rompe)
         let k = 1;
         if (b.d0 && (atoms[b.i].ox !== undefined || atoms[b.j].ox !== undefined)) {
@@ -127,7 +131,7 @@ function drawCrystal3D() {
         if (k <= 0) continue;
         items.push({ type: 'bond', b, k, depth: (crystal3DProj[b.i].depth + crystal3DProj[b.j].depth) / 2 + 0.01 });
     }
-    for (let i = 0; i < atoms.length; i++) items.push({ type: 'atom', i, depth: crystal3DProj[i].depth });
+    for (let i = 0; i < atoms.length; i++) if (vis(i)) items.push({ type: 'atom', i, depth: crystal3DProj[i].depth });
     for (const g of crystal3DGhosts) {
         items.push({ type: 'ghost', g, p: _crystal3DProject(g.x, g.y, g.z, cam), depth: 0 });
         items[items.length - 1].depth = items[items.length - 1].p.depth;
