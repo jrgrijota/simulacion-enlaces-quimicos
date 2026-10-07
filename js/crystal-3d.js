@@ -149,10 +149,10 @@ function drawCrystal3D() {
                 drawingContext.setLineDash([]);
             } else if (lit) {
                 stroke(251, 191, 36, 230 * it.k); strokeWeight(3.2 * pa.f);
-                line(pa.sx, pa.sy, pb.sx, pb.sy);
+                _bondLine(pa, pb, b.double);
             } else {
                 stroke(203, 213, 225, (hasSel ? 40 : 150) * k); strokeWeight(2.4 * pa.f);
-                line(pa.sx, pa.sy, pb.sx, pb.sy);
+                _bondLine(pa, pb, b.double);
             }
         } else if (it.type === 'ghost') {
             stroke(251, 191, 36, 200);
@@ -175,6 +175,15 @@ function drawCrystal3D() {
     }
 
     _drawCrystal3DHud(hasSel);
+}
+
+// Enlace simple o doble (dos líneas paralelas en pantalla)
+function _bondLine(pa, pb, double) {
+    if (!double) { line(pa.sx, pa.sy, pb.sx, pb.sy); return; }
+    const dx = pb.sx - pa.sx, dy = pb.sy - pa.sy, L = Math.hypot(dx, dy) || 1;
+    const o = 2.6 * pa.f, nx = -dy / L * o, ny = dx / L * o;
+    line(pa.sx + nx, pa.sy + ny, pb.sx + nx, pb.sy + ny);
+    line(pa.sx - nx, pa.sy - ny, pb.sx - nx, pb.sy - ny);
 }
 
 function _drawCrystal3DSphere(p, spKey, light, alphaK, ghost) {

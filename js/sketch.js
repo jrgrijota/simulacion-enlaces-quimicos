@@ -167,6 +167,8 @@ function draw() {
         }
     } else if (currentMode === 'METALLIC') {
         drawMetallic();
+    } else if (currentMode === 'COVALENT' && covCrystalMode) {
+        drawCovalentCrystal(); // js/covalent-crystal-mode.js
     } else if (currentMode === 'COVALENT') {
         updateBondAnim();
         for (let a of atoms) { a.update(); a.draw(); }
@@ -288,6 +290,7 @@ function initSimulation() {
     elBtnDeform         = null;
     elMetallicInfo      = null;
     ionicCrystalMode    = false;
+    covCrystalMode      = false;
     ionicCrystalPhase   = 'normal';
     ionicShearModel     = null;
     ionicShearState     = null;
@@ -471,6 +474,10 @@ function buildIonicUI() {
 // UI COVALENTE
 // ============================================================
 function buildCovalentUI() {
+    // También se llama al volver de los cristales: vaciar antes para no
+    // duplicar selectores ni cajas de estado
+    clearAtomControls();
+
     // Sidebar: reset
     let resetRow = createDiv().class('reset-row');
     let resetBtn = createButton('↺ Reiniciar simulación');
@@ -485,6 +492,22 @@ function buildCovalentUI() {
     elResultBody = createDiv().class('card-body-static');
     elResultCard.child(elResultBody);
     uiContainer.child(elResultCard);
+
+    // Sidebar: acceso a los cristales covalentes (js/covalent-crystal-mode.js)
+    let cCard = createDiv().class('card');
+    cCard.child(createDiv('Sólidos covalentes').class('atom-card-label'));
+    let cBody = createDiv().class('card-body-static');
+    let cBtn = createButton('🔷 Ver cristales covalentes');
+    cBtn.class('btn-primary');
+    cBtn.style('width', '100%');
+    cBtn.mousePressed(enterCovalentCrystal);
+    cBody.child(cBtn);
+    let cHint = createDiv('Diamante, grafito, sílice y hielo seco');
+    cHint.style('font-size', '10.5px').style('color', 'var(--text-muted)')
+         .style('text-align', 'center').style('margin-top', '5px');
+    cBody.child(cHint);
+    cCard.child(cBody);
+    uiContainer.child(cCard);
 
     // Columnas de control bajo el canvas
     const labels = ['Átomo A', 'Átomo B', 'Átomo C'];
@@ -1537,11 +1560,13 @@ function mouseDragged()  { return crystal3DMouseDragged(); }
 function mouseReleased() { crystal3DMouseReleased(); }
 
 function mouseClicked() {
-    if (ionicCrystalMode) {
+    const inCovCrystal = currentMode === 'COVALENT' && covCrystalMode;
+    if (ionicCrystalMode || inCovCrystal) {
         if (_crystalBackBtnBounds) {
             let r = _crystalBackBtnBounds;
             if (mouseX >= r.x && mouseX <= r.x + r.w && mouseY >= r.y && mouseY <= r.y + r.h) {
-                exitIonicCrystal();
+                if (inCovCrystal) exitCovalentCrystal();
+                else exitIonicCrystal();
                 return;
             }
         }
