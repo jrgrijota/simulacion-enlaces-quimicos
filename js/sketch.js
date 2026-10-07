@@ -1817,8 +1817,50 @@ function buildIonicCrystalUI() {
     vCard.child(vBody);
     uiContainer.child(vCard);
 
+    buildIonicCrystalInfoCard();
+
     if (ionicView === '3d') buildIonicCrystal3DControls();
     else                    buildIonicCrystal2DControls();
+}
+
+// Tarjeta con la estructura real del cristal (nivel ESO)
+function buildIonicCrystalInfoCard() {
+    const s = ionicStructure;
+    const ion = (sym, q) => `<b>${sym}<sup style="font-size:0.72em">${chargeStr(q)}</sup></b>`;
+    const cat = ion(s.cat.sym, s.cat.charge);
+    const an  = ion(s.an.sym,  s.an.charge);
+    const qStr = q => (q > 0 ? '+' : '−') + Math.abs(q);
+
+    // "2 Na⁺ por cada S²⁻", "1 Ca²⁺ por cada 2 F⁻"
+    const ratio = `${s.ratio.cat} ${cat} por cada ${s.ratio.an > 1 ? s.ratio.an + ' ' : ''}${an}`;
+    const balance = `${s.ratio.cat}·(${qStr(s.cat.charge)}) + ${s.ratio.an}·(${qStr(s.an.charge)}) = 0`;
+
+    let viewText;
+    if (ionicView === '2d') {
+        viewText = 'Vista de una <b>capa</b> de la red: conserva la proporción de iones del cristal.';
+    } else if (s.id === 'cdcl2') {
+        viewText = `Se muestran dos <b>láminas</b> ${s.an.sym}–${s.cat.sym}–${s.an.sym}. Entre láminas las fuerzas son débiles, por eso el cristal se separa en escamas.`;
+    } else {
+        viewText = 'La <b>celda unidad</b> es la parte más pequeña de la red que, repetida en todas las direcciones, forma el cristal.';
+    }
+
+    let card = createDiv().class('card');
+    card.child(createDiv('Red cristalina').class('atom-card-label'));
+    let body = createDiv().class('card-body-static');
+    body.html(`
+        <div class="compound-formula">${getCompoundName()}</div>
+        <div class="result-detail">${s.name}</div>
+        <div class="result-detail" style="margin-bottom:8px">${s.lattice}</div>
+        <div class="info-section">
+            <p><em>Proporción:</em> ${ratio}<br>
+               <span style="opacity:0.8">${balance} → cristal neutro</span></p>
+            <p><em>Entorno:</em> cada ${cat} está rodeado de ${s.cn.cat} ${an} y cada ${an} de ${s.cn.an} ${cat}.</p>
+            <p>${viewText}</p>
+            ${s.note ? `<p class="crystal-note">⚠ ${s.note}</p>` : ''}
+        </div>
+    `);
+    card.child(body);
+    uiContainer.child(card);
 }
 
 function setIonicView(view) {
