@@ -247,14 +247,8 @@ function togglePause() {
     }
 }
 
-function initSimulation() {
-    if (!isLooping()) {
-        loop();
-        let btn = document.getElementById('pause-btn');
-        if (btn) { btn.textContent = '⏸ Pausar'; btn.classList.remove('btn-primary'); }
-    }
-
-    uiContainer.html('');
+// Vacía los controles de átomo bajo el canvas (selectores, carga, botones)
+function clearAtomControls() {
     ['ctrl-0', 'ctrl-1', 'ctrl-2'].forEach(id => {
         let el = select(`#${id}`);
         if (el) el.html('');
@@ -263,6 +257,17 @@ function initSimulation() {
         let el = document.getElementById(id);
         if (el) { el.innerHTML = ''; el.style.display = 'none'; }
     });
+}
+
+function initSimulation() {
+    if (!isLooping()) {
+        loop();
+        let btn = document.getElementById('pause-btn');
+        if (btn) { btn.textContent = '⏸ Pausar'; btn.classList.remove('btn-primary'); }
+    }
+
+    uiContainer.html('');
+    clearAtomControls();
 
     atoms          = [];
     atomSelects    = [];
@@ -381,6 +386,10 @@ function resetCovalentSimulation() {
 // UI DOM
 // ============================================================
 function buildIonicUI() {
+    // También se llama al volver de la red cristalina: vaciar antes para no
+    // duplicar selectores ni cajas de carga (ids data-*)
+    clearAtomControls();
+
     // ── Sidebar: botón de reinicio ──
     let resetRow = createDiv().class('reset-row');
     let resetBtn = createButton('↺ Reiniciar simulación');
