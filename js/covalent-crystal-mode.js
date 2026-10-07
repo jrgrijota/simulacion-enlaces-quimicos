@@ -30,6 +30,7 @@ function exitCovalentCrystal() {
     _crystalPauseBtnBounds = null;
     elChkAutoRotate        = null;
     covThermal = null; elTempSlider = null; elTempLabel = null;
+    covVoltage = false; covElectrons = []; covAdj = null; elBtnCovVoltage = null;
 
     let ctrlRow = document.getElementById('atom-controls-row');
     if (ctrlRow) ctrlRow.style.display = 'flex';
@@ -49,13 +50,16 @@ function selectCovalentCrystal(id) {
     setCrystal3DScene(buildCovalentScene(id));
     covTemp = covInitialTemp(COVALENT_CRYSTALS[id]);
     initCovalentThermal();
+    covVoltage = false; covElectrons = []; covAdj = null;
     buildCovalentCrystalUI();
     if (!isLooping()) redraw();
 }
 
 function drawCovalentCrystal() {
     updateCovalentThermal();
+    updateCovalentElectrons();
     drawCrystal3D();
+    drawCovalentVoltage();
     drawCovalentThermalHud();
     drawIonicCrystalButtons(); // ← Volver / Pausar (mismos botones que la red iónica)
 }
@@ -250,6 +254,12 @@ function buildCovalentExperimentsCard() {
     card.child(createDiv('Experimentos').class('atom-card-label'));
     let body = createDiv().class('card-body-static');
 
+    elBtnCovVoltage = createButton(covVoltage ? '■ Quitar voltaje' : '⚡ Aplicar voltaje');
+    elBtnCovVoltage.class('btn-primary');
+    elBtnCovVoltage.style('width', '100%').style('margin-bottom', '8px');
+    elBtnCovVoltage.mousePressed(() => setCovalentVoltage(!covVoltage));
+    body.child(elBtnCovVoltage);
+
     let row = createDiv();
     row.style('display', 'flex').style('justify-content', 'space-between')
        .style('align-items', 'center').style('margin-bottom', '4px');
@@ -331,6 +341,128 @@ function drawCovalentThermalHud() {
                'Por eso los cristales covalentes tienen temperaturas de fusión altísimas'];
     }
     const y1 = height - 66 - 34, y2 = height - 66 - 16;
+    textAlign(CENTER, CENTER);
+    fill(msg[0]); textSize(14); textStyle(BOLD);
+    text(msg[1], width / 2, y1);
+    textStyle(NORMAL);
+    fill('#94A3B8'); textSize(11);
+    text(msg[2], width / 2, y2);
+}
+
+// ============================================================
+// EXPERIMENTO: CONDUCTIVIDAD
+// ------------------------------------------------------------
+// En el grafito cada C usa 3 electrones en enlaces con sus vecinos
+// de lámina; el cuarto queda deslocalizado y puede moverse. Con
+// voltaje, esos electrones avanzan por los enlaces de la lámina
+// hacia el polo +. Como no hay enlaces entre láminas, solo conduce
+// a lo largo de ellas. Los demás cristales no conducen.
+// ============================================================
+
+let covVoltage   = false;
+let covElectrons = [];     // [{ from, to, t }] sobre enlaces fuertes
+let covAdj       = null;   // vecinos por enlace fuerte
+let elBtnCovVoltage = null;
+
+const COV_E_COUNT = 28;
+
+function _covBuildAdj() {
+    const sc = crystal3DScene;
+    covAdj = sc.atoms.map(() => []);
+    for (const b of sc.bonds) {
+        if (b.weak) continue;
+        covAdj[b.i].push(b.j);
+        covAdj[b.j].push(b.i);
+    }
+}
+
+// Un electrón nuevo entra por el lado del polo − (x mínima)
+function _covSpawnElectron() {
+    const sc = crystal3DScene;
+    const xs = sc.atoms.map(p => p.x);
+    const xMin = Math.min(...xs), xMax = Math.max(...xs);
+    const cands = sc.atoms.map((p, i) => i)
+        .filter(i => covAdj[i].length && sc.atoms[i].x < xMin + (xMax - xMin) * 0.3);
+    const from = cands[Math.floor(Math.random() * cands.length)];
+    return { from, to: _covNextAtom(from, -1), t: Math.random() };
+}
+
+// Siguiente átomo: preferentemente en la dirección del campo (+x)
+function _covNextAtom(at, prev) {
+    const sc = crystal3DScene;
+    const opts = covAdj[at].filter(j => j !== prev);
+    if (!opts.length) return -1;
+    const w = opts.map(j => Math.max(0, sc.atoms[j].x - sc.atoms[at].x) + 0.15);
+    let r = Math.random() * w.reduce((a, b) => a + b, 0);
+    for (let k = 0; k < opts.length; k++) { r -= w[k]; if (r <= 0) return opts[k]; }
+    return opts[opts.length - 1];
+}
+
+function setCovalentVoltage(on) {
+    covVoltage = on;
+    covElectrons = [];
+    if (on && COVALENT_CRYSTALS[covCrystalId].conducts) {
+        _covBuildAdj();
+        for (let k = 0; k < COV_E_COUNT; k++) covElectrons.push(_covSpawnElectron());
+    }
+    if (elBtnCovVoltage) elBtnCovVoltage.html(on ? '■ Quitar voltaje' : '⚡ Aplicar voltaje');
+    if (!isLooping()) redraw();
+}
+
+function updateCovalentElectrons() {
+    if (!covVoltage || !covElectrons.length || covPhase() !== 'solid') return;
+    for (let k = 0; k < covElectrons.length; k++) {
+        const e = covElectrons[k];
+        if (e.to < 0) { covElectrons[k] = _covSpawnElectron(); continue; }
+        e.t += 0.05;
+        if (e.t >= 1) {
+            const next = _covNextAtom(e.to, e.from);
+            // Llega al borde de la región (polo +): vuelve a entrar por el −
+            if (next < 0) { covElectrons[k] = _covSpawnElectron(); continue; }
+            e.from = e.to; e.to = next; e.t -= 1;
+        }
+    }
+}
+
+function drawCovalentVoltage() {
+    if (!covVoltage || !crystal3DScene || !crystal3DCam) return;
+    const sc = crystal3DScene, cam = crystal3DCam;
+    const d = COVALENT_CRYSTALS[covCrystalId];
+
+    // Electrodos en los extremos del cristal a lo largo de x (giran con él)
+    const R = sc.radius * 1.15;
+    const pm = _crystal3DProject(-R, 0, 0, cam), pp = _crystal3DProject(R, 0, 0, cam);
+    noStroke();
+    textAlign(CENTER, CENTER); textStyle(BOLD); textSize(24);
+    fill('#38BDF8'); text('−', pm.sx, pm.sy);
+    fill('#EF4444'); text('+', pp.sx, pp.sy);
+    textStyle(NORMAL);
+
+    // Electrones deslocalizados (grafito)
+    if (covPhase() === 'solid') {
+        for (const e of covElectrons) {
+            if (e.to < 0) continue;
+            const a = sc.atoms[e.from], b = sc.atoms[e.to];
+            if (a.hidden || b.hidden) continue;
+            const pa = _atomPos(a), pb = _atomPos(b);
+            const p = _crystal3DProject(pa[0] + (pb[0] - pa[0]) * e.t, pa[1] + (pb[1] - pa[1]) * e.t,
+                                        pa[2] + (pb[2] - pa[2]) * e.t, cam);
+            if (p.f <= 0.2) continue;
+            fill(250, 204, 21, 60); circle(p.sx, p.sy, 12 * p.f);
+            fill(250, 204, 21);     circle(p.sx, p.sy, 5 * p.f);
+        }
+    }
+
+    const msg = d.conducts
+        ? ['#FACC15', 'Conduce: los electrones se mueven a lo largo de las láminas',
+           'Cada C usa 3 electrones en enlaces; el 4.º queda libre y se desplaza hacia el polo +']
+        : ['#EF4444', 'No conduce la electricidad',
+           d.kind === 'molecular'
+               ? 'Las moléculas son neutras y sus electrones están en los enlaces: no hay cargas libres'
+               : 'Todos los electrones de valencia están fijos en los enlaces covalentes: no hay cargas libres'];
+    // Encima del mensaje de temperatura (si lo hay)
+    const busy = covTemp !== covInitialTemp(d);
+    const y1 = height - 66 - (busy ? 74 : 34), y2 = y1 + 18;
     textAlign(CENTER, CENTER);
     fill(msg[0]); textSize(14); textStyle(BOLD);
     text(msg[1], width / 2, y1);
