@@ -1531,10 +1531,10 @@ function drawBondEffect() {
     }
 }
 
-// Giro y selección en la celda 3D (js/crystal-3d.js)
-function mousePressed()  { ionic3DMousePressed(); }
-function mouseDragged()  { return ionic3DMouseDragged(); }
-function mouseReleased() { ionic3DMouseReleased(); }
+// Giro y selección en el visor 3D de cristales (js/crystal-3d.js)
+function mousePressed()  { crystal3DMousePressed(); }
+function mouseDragged()  { return crystal3DMouseDragged(); }
+function mouseReleased() { crystal3DMouseReleased(); }
 
 function mouseClicked() {
     if (ionicCrystalMode) {
@@ -1630,16 +1630,17 @@ function enterIonicCrystal() {
     );
     if (!ionicStructure) return;
     ionicLayer = buildCrystalLayer(ionicStructure);
-    ionicView  = '3d';
-    ionic3DAutoRotate = true;
-    initIonicCrystal3D();
-
     ionicCatSym    = cation.symbol;
     ionicCatColor  = cation.data.color;
     ionicCatCharge = cation.netCharge;
     ionicAnSym     = anion.symbol;
     ionicAnColor   = anion.data.color;
     ionicAnCharge  = anion.netCharge;
+
+    // La escena 3D copia símbolos y colores: crearla después de asignarlos
+    ionicView  = '3d';
+    crystal3DAutoRotate = true;
+    initIonicCrystal3D();
 
     // Snapshot electron config before clearing bond state
     ionicCatElecConfig = cation.electrons.map(e => ({ shell: e.shell, transferred: !!e.transferred }));
@@ -1871,7 +1872,7 @@ function setIonicView(view) {
     resetIonicShear();
     ionicShowShearForces = false;
     ionicShowElectrons   = false;
-    selectIonic3DIon(-1);
+    selectCrystal3DAtom(-1);
     buildIonicCrystalUI();
     if (!isLooping()) redraw();
 }
@@ -1882,22 +1883,7 @@ function buildIonicCrystal3DControls() {
     fCard.child(createDiv('Visualización').class('atom-card-label'));
     fCard.child(fBody);
 
-    let rLabel = createDiv();
-    rLabel.style('display', 'flex').style('align-items', 'center').style('gap', '8px')
-          .style('cursor', 'pointer').style('padding', '2px 0');
-    elChkAutoRotate = createElement('input');
-    elChkAutoRotate.attribute('type', 'checkbox');
-    elChkAutoRotate.attribute('id', 'chk-autorotate');
-    elChkAutoRotate.style('width', '14px').style('height', '14px').style('cursor', 'pointer')
-                   .style('accent-color', 'var(--accent)');
-    elChkAutoRotate.elt.checked = ionic3DAutoRotate;
-    let rLbl = createElement('label', 'Giro automático');
-    rLbl.attribute('for', 'chk-autorotate');
-    rLbl.style('font-size', '11.5px').style('color', 'var(--text-label)')
-        .style('cursor', 'pointer').style('user-select', 'none');
-    rLabel.child(elChkAutoRotate); rLabel.child(rLbl);
-    fBody.child(rLabel);
-    elChkAutoRotate.elt.addEventListener('change', () => { ionic3DAutoRotate = elChkAutoRotate.elt.checked; });
+    createAutoRotateCheckbox(fBody);
 
     let hint = createDiv('Los experimentos de voltaje y cizalladura están en la vista <b>Capa 2D</b>.');
     hint.style('font-size', '10.5px').style('color', 'var(--text-muted)').style('margin-top', '6px');
@@ -2032,7 +2018,7 @@ function buildIonicCrystal2DControls() {
 // ── Bucle principal ───────────────────────────────────────────
 function drawIonicCrystal() {
     if (ionicView === '3d') {
-        drawIonicCrystal3D(); // js/crystal-3d.js
+        drawCrystal3D(); // js/crystal-3d.js
         drawIonicCrystalButtons();
         return;
     }
