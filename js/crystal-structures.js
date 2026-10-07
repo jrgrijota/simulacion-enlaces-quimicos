@@ -367,7 +367,7 @@ function _findShearPlane(ions, ys, period, dMin) {
     for (let k = 0; k < ys.length - 1; k++) {
         const gap = ys[k + 1] - ys[k];
         const dMid = Math.abs((ys[k] + ys[k + 1]) / 2 - mid);
-        if (gap > bestGap + 1e-3 || (Math.abs(gap - bestGap) <= 1e-3 && dMid < bestDist)) {
+        if (gap > bestGap + 0.02 || (Math.abs(gap - bestGap) <= 0.02 && dMid < bestDist)) {
             best = k; bestGap = gap; bestDist = dMid;
         }
     }

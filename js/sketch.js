@@ -69,12 +69,17 @@ let elMetallicInfo = null;
 // Ionic crystal lattice state
 let ionicCrystalMode      = false;
 let ionicCrystalPhase     = 'normal'; // 'normal' | 'voltage' | 'shear'
-let ionicCrystalCols      = 7;
-let ionicCrystalRows      = 4;
-let ionicCrystalSpacing   = 72;
+let ionicStructure        = null; // estructura real (selectIonicStructure)
+let ionicLayer            = null; // capa 2D de la red (buildCrystalLayer)
+let ionicLayerScale       = 1;    // px por Å en la vista 2D
+let ionicCrystalW         = 0;    // tamaño de la capa en px
+let ionicCrystalH         = 0;
+let ionicCrystalSpacing   = 72;   // distancia catión–anión en px
 let ionicCrystalStartX    = 0;
 let ionicCrystalStartY    = 0;
 let ionicCrystalAtoms     = [];
+let ionicCrystalPairs     = [];   // [ionA, ionB] vecinos catión–anión (atracción)
+let ionicShearPairsCache  = null; // pares de igual carga enfrentados al cizallar
 let ionicCrystalRowArrays = []; // cached per-row slices for fast access
 let ionicCatSym         = '';
 let ionicCatColor       = '';
@@ -1613,6 +1618,14 @@ function enterIonicCrystal() {
     let anion  = active.find(a => a.netCharge < 0);
     if (!cation || !anion) return;
 
+    // Red real según catión, anión y proporción (p. ej. Na₂S → antifluorita)
+    ionicStructure = selectIonicStructure(
+        active.filter(a => a.netCharge > 0).map(a => ({ sym: a.symbol, charge: a.netCharge })),
+        active.filter(a => a.netCharge < 0).map(a => ({ sym: a.symbol, charge: a.netCharge }))
+    );
+    if (!ionicStructure) return;
+    ionicLayer = buildCrystalLayer(ionicStructure);
+
     ionicCatSym    = cation.symbol;
     ionicCatColor  = cation.data.color;
     ionicCatCharge = cation.netCharge;
@@ -1675,84 +1688,103 @@ function exitIonicCrystal() {
 function initIonicCrystalGrid() {
     ionicCrystalAtoms     = [];
     ionicCrystalRowArrays = [];
-    const cols = ionicCrystalCols;
-    const rows = ionicCrystalRows;
+    ionicCrystalPairs     = [];
+    ionicShearPairsCache  = null;
+    if (!ionicLayer) return;
+    const L = ionicLayer;
 
+    // Escala px/Å: la capa ocupa ~64 % del ancho y ~60 % del alto útil,
+    // sin que la distancia catión–anión supere 88 px
     const btmReserve = 66; // space at the bottom for canvas buttons
-    let colSp = (width * 0.64) / (cols - 1);
-    let rowSp = ((height - btmReserve) * 0.60) / (rows - 1);
-    ionicCrystalSpacing = constrain(min(colSp, rowSp), 52, 88);
+    ionicLayerScale = min((width * 0.64) / L.width,
+                          ((height - btmReserve) * 0.60) / L.height,
+                          88 / L.dMin);
+    ionicCrystalSpacing = L.dMin * ionicLayerScale;
+    ionicCrystalW = L.width  * ionicLayerScale;
+    ionicCrystalH = L.height * ionicLayerScale;
+    ionicCrystalStartX = width  / 2 - ionicCrystalW / 2;
+    ionicCrystalStartY = (height - btmReserve) / 2 - ionicCrystalH / 2;
 
-    let totalW = (cols - 1) * ionicCrystalSpacing;
-    let totalH = (rows - 1) * ionicCrystalSpacing;
-    ionicCrystalStartX = width  / 2 - totalW / 2;
-    ionicCrystalStartY = (height - btmReserve) / 2 - totalH / 2;
+    // Tamaño proporcional al radio iónico (los aniones suelen ser mayores)
+    const rSum = ionicStructure.cat.radius + ionicStructure.an.radius;
+    const kinds = {};
+    for (const kind of ['cat', 'an']) {
+        const isCat   = kind === 'cat';
+        const radius  = isCat ? ionicStructure.cat.radius : ionicStructure.an.radius;
+        const nucSize = max(ionicCrystalSpacing * 0.84 * radius / rSum, 20);
+        const sym     = isCat ? ionicCatSym : ionicAnSym;
+        const charge  = isCat ? ionicCatCharge : ionicAnCharge;
+        const sup     = charge > 0
+            ? (charge === 1 ? '+' : charge + '+')
+            : (Math.abs(charge) === 1 ? '−' : Math.abs(charge) + '−');
+        // Cache RGB to avoid color() constructor each frame
+        const col = color(isCat ? ionicCatColor : ionicAnColor);
+        // Precompute text metrics for the draw loop
+        const symSz  = max(nucSize * 0.32, 10);
+        const supSz  = max(nucSize * 0.22, 7);
+        const supShY = max(nucSize * 0.12, 4);
+        textStyle(BOLD);
+        textSize(symSz); const symW = textWidth(sym);
+        textSize(supSz); const supW = textWidth(sup);
+        textStyle(NORMAL);
+        kinds[kind] = {
+            sym, sup, charge, isCat, color: isCat ? ionicCatColor : ionicAnColor,
+            r: red(col), g: green(col), b: blue(col),
+            nucSize, symSz, supSz, supShY, symW, supW,
+            elCfg: isCat ? ionicCatElecConfig : ionicAnElecConfig,
+        };
+    }
 
-    // Precompute text metrics for the draw loop (constant per spacing level)
-    const nucSize = max(ionicCrystalSpacing * 0.38, 24);
-    const symSz   = max(nucSize * 0.32, 10);
-    const supSz   = max(nucSize * 0.22, 7);
-    const supShY  = max(nucSize * 0.12, 4);
+    for (const site of L.ions) {
+        const k  = kinds[site.kind];
+        const bx = ionicCrystalStartX + site.x * ionicLayerScale;
+        const by = ionicCrystalStartY + site.y * ionicLayerScale;
 
-    for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-            let isCat  = (r + c) % 2 === 0;
-            let sym    = isCat ? ionicCatSym    : ionicAnSym;
-            let clr    = isCat ? ionicCatColor  : ionicAnColor;
-            let charge = isCat ? ionicCatCharge : ionicAnCharge;
-            let bx     = ionicCrystalStartX + c * ionicCrystalSpacing;
-            let by     = ionicCrystalStartY + r * ionicCrystalSpacing;
+        // Count electrons per shell so we can space them evenly
+        const shellCounts = {};
+        for (let e of k.elCfg) shellCounts[e.shell] = (shellCounts[e.shell] || 0) + 1;
+        const shellIdx = {}; // running index per shell for angle assignment
+        const shellOffset = {}; // random starting offset per shell
+        for (let s in shellCounts) {
+            shellIdx[s] = 0;
+            shellOffset[s] = random(TWO_PI);
+        }
+        const elAngles = k.elCfg.map(e => {
+            const idx   = shellIdx[e.shell]++;
+            const total = shellCounts[e.shell];
+            return {
+                shell:       e.shell,
+                transferred: e.transferred,
+                angle:       shellOffset[e.shell] + (TWO_PI / total) * idx,
+                speed:       max(0.008, 0.022 - e.shell * 0.005)
+            };
+        });
+        ionicCrystalAtoms.push({
+            sym: k.sym, sup: k.sup, color: k.color, r: k.r, g: k.g, b: k.b,
+            charge: k.charge, isCat: k.isCat,
+            baseX: bx, baseY: by,
+            x: bx, y: by,
+            row: site.row,
+            vibPhase: random(TWO_PI),
+            // pre-baked draw constants
+            symW: k.symW, supW: k.supW, symSz: k.symSz, supSz: k.supSz, supShY: k.supShY,
+            nucSize: k.nucSize,
+            elAngles,
+        });
+    }
 
-            const sup  = charge > 0
-                ? (charge === 1 ? '+' : charge + '+')
-                : (Math.abs(charge) === 1 ? '−' : Math.abs(charge) + '−');
-
-            // Cache RGB to avoid color() constructor each frame
-            const col = color(clr);
-            const cR  = red(col), cG = green(col), cB = blue(col);
-
-            // Cache text widths (font must already be initialized)
-            textStyle(BOLD);
-            textSize(symSz); const symW = textWidth(sym);
-            textSize(supSz); const supW = textWidth(sup);
-            textStyle(NORMAL);
-
-            const elCfg = isCat ? ionicCatElecConfig : ionicAnElecConfig;
-            // Count electrons per shell so we can space them evenly
-            const shellCounts = {};
-            for (let e of elCfg) shellCounts[e.shell] = (shellCounts[e.shell] || 0) + 1;
-            const shellIdx = {}; // running index per shell for angle assignment
-            const shellOffset = {}; // random starting offset per shell, same for all ions of same type
-            for (let s in shellCounts) {
-                shellIdx[s] = 0;
-                shellOffset[s] = random(TWO_PI);
-            }
-            const elAngles = elCfg.map(e => {
-                const idx   = shellIdx[e.shell]++;
-                const total = shellCounts[e.shell];
-                return {
-                    shell:       e.shell,
-                    transferred: e.transferred,
-                    angle:       shellOffset[e.shell] + (TWO_PI / total) * idx,
-                    speed:       max(0.008, 0.022 - e.shell * 0.005)
-                };
-            });
-            ionicCrystalAtoms.push({
-                sym, sup, color: clr, r: cR, g: cG, b: cB, charge, isCat,
-                baseX: bx, baseY: by,
-                x: bx, y: by,
-                row: r, col: c,
-                vibPhase: random(TWO_PI),
-                // pre-baked draw constants
-                symW, supW, symSz, supSz, supShY,
-                nucSize,
-                elAngles,
-            });
+    // Pares catión–anión vecinos (líneas de atracción de Coulomb)
+    const maxD = ionicCrystalSpacing * 1.12;
+    for (let i = 0; i < ionicCrystalAtoms.length; i++) {
+        for (let j = i + 1; j < ionicCrystalAtoms.length; j++) {
+            const a = ionicCrystalAtoms[i], b = ionicCrystalAtoms[j];
+            if (a.isCat === b.isCat) continue;
+            if (dist(a.baseX, a.baseY, b.baseX, b.baseY) <= maxD) ionicCrystalPairs.push([a, b]);
         }
     }
 
     // Cache slices by row for O(1) lookup in overlay code
-    for (let r = 0; r < rows; r++) {
+    for (let r = 0; r < L.rowYs.length; r++) {
         ionicCrystalRowArrays[r] = ionicCrystalAtoms.filter(ion => ion.row === r);
     }
 }
@@ -1816,7 +1848,8 @@ function buildIonicCrystalUI() {
                 ionicCrystalPhase = 'shear';
                 elBtnIonicVoltage2.html('⚡ Aplicar voltaje');
             }
-            ionicShearOffset  = (v / 100) * ionicCrystalSpacing;
+            // Desplazamiento máximo: el que enfrenta iones de igual carga
+            ionicShearOffset  = (v / 100) * ionicShearShiftPx();
             ionicShearAligned = v >= 100;
             if (!ionicShearAligned) ionicGapOffset = 0;
             const lbl = v >= 95 ? '¡Fractura!' : v + '%';
@@ -1904,7 +1937,7 @@ function updateIonicCrystalPhysics() {
             ionicGapOffset = lerp(ionicGapOffset, ionicCrystalSpacing * 1.5, 0.028);
         }
         for (let ion of ionicCrystalAtoms) {
-            if (ion.row < 2) {
+            if (ion.row <= ionicLayer.shear.splitRow) { // bloque sobre el plano
                 ion.x = ion.baseX + ionicShearOffset;
                 ion.y = ion.baseY - ionicGapOffset * 0.45;
             } else {
@@ -1929,8 +1962,8 @@ function drawIonicCrystalBg() {
     const pad   = ionicCrystalSpacing * 0.72;
     const rx    = ionicCrystalStartX - pad;
     const ry    = ionicCrystalStartY - pad;
-    const rw    = (ionicCrystalCols - 1) * ionicCrystalSpacing + pad * 2;
-    const rh    = (ionicCrystalRows - 1) * ionicCrystalSpacing + pad * 2;
+    const rw    = ionicCrystalW + pad * 2;
+    const rh    = ionicCrystalH + pad * 2;
     const pulse = sin(frameCount * 0.018) * 0.5 + 0.5;
 
     noStroke();
@@ -1944,27 +1977,10 @@ function drawIonicCrystalBg() {
 
 function drawIonicCoulombLines() {
     if (ionicCrystalPhase === 'shear' && ionicGapOffset > ionicCrystalSpacing * 0.2) return;
-    const cols = ionicCrystalCols;
-    const rows = ionicCrystalRows;
     drawingContext.setLineDash([3, 4]);
     strokeWeight(1);
-    for (let ion of ionicCrystalAtoms) {
-        let r = ion.row, c = ion.col;
-        if (c + 1 < cols) {
-            let nb = ionicCrystalAtoms[r * cols + c + 1];
-            if (ion.isCat !== nb.isCat) {
-                stroke(255, 255, 255, 16);
-                line(ion.x, ion.y, nb.x, nb.y);
-            }
-        }
-        if (r + 1 < rows) {
-            let nb = ionicCrystalAtoms[(r + 1) * cols + c];
-            if (ion.isCat !== nb.isCat) {
-                stroke(255, 255, 255, 16);
-                line(ion.x, ion.y, nb.x, nb.y);
-            }
-        }
-    }
+    stroke(255, 255, 255, 16);
+    for (const [a, b] of ionicCrystalPairs) line(a.x, a.y, b.x, b.y);
     drawingContext.setLineDash([]);
 }
 
@@ -1992,7 +2008,6 @@ function drawIonicCrystalGrid() {
 }
 
 function drawIonicCrystalElectrons() {
-    const sp = ionicCrystalSpacing;
     // Faint dot-dash orbits + electron dots, scaled to fit within lattice
     noFill();
     strokeWeight(0.8);
@@ -2004,7 +2019,7 @@ function drawIonicCrystalElectrons() {
         // Determine outermost shell and compute scale so it fits
         let maxS = 0;
         for (let e of ion.elAngles) { if (e.shell > maxS) maxS = e.shell; }
-        const scale = (sp * 0.39) / SHELL_RADII[maxS];
+        const scale = (ion.nucSize * 0.95) / SHELL_RADII[maxS]; // capa externa ∝ tamaño del ion
 
         // Orbit rings (one per shell)
         const drawnShells = new Set();
@@ -2024,7 +2039,7 @@ function drawIonicCrystalElectrons() {
         if (!ion.elAngles.length) continue;
         let maxS = 0;
         for (let e of ion.elAngles) { if (e.shell > maxS) maxS = e.shell; }
-        const scale = (sp * 0.39) / SHELL_RADII[maxS];
+        const scale = (ion.nucSize * 0.95) / SHELL_RADII[maxS]; // capa externa ∝ tamaño del ion
         for (let e of ion.elAngles) {
             const r  = SHELL_RADII[e.shell] * scale;
             const ex = ion.x + cos(e.angle) * r;
@@ -2042,11 +2057,11 @@ function drawIonicCrystalOverlay() {
 
 function drawIonicVoltageOverlay() {
     const pad    = ionicCrystalSpacing * 0.72;
-    const rightX = ionicCrystalStartX + (ionicCrystalCols - 1) * ionicCrystalSpacing + pad + 30;
+    const rightX = ionicCrystalStartX + ionicCrystalW + pad + 30;
     const leftX  = ionicCrystalStartX - pad - 30;
-    const midY   = ionicCrystalStartY + ((ionicCrystalRows - 1) * ionicCrystalSpacing) / 2;
+    const midY   = ionicCrystalStartY + ionicCrystalH / 2;
     const topY   = ionicCrystalStartY - pad;
-    const botY   = ionicCrystalStartY + (ionicCrystalRows - 1) * ionicCrystalSpacing + pad;
+    const botY   = ionicCrystalStartY + ionicCrystalH + pad;
 
     noStroke();
     textAlign(CENTER, CENTER);
@@ -2076,32 +2091,63 @@ function drawIonicVoltageOverlay() {
     text('(conduciría fundido o en disolución acuosa)', width / 2, msgY2);
 }
 
+// Desplazamiento (px) que enfrenta iones de igual carga a ambos lados del plano
+function ionicShearShiftPx() {
+    return ionicLayer && ionicLayer.shear ? ionicLayer.shear.shift * ionicLayerScale : ionicCrystalSpacing;
+}
+
+// Y (px) del plano de cizalladura en reposo
+function ionicShearPlaneY() {
+    return ionicCrystalStartY + ionicLayer.shear.planeY * ionicLayerScale;
+}
+
+// Pares de iones de igual carga enfrentados a través del plano cuando el
+// bloque superior se ha desplazado del todo (se calcula sobre posiciones base)
+function ionicShearRepulsionPairs() {
+    const split = ionicLayer.shear.splitRow;
+    const shift = ionicShearShiftPx();
+    const planeY = ionicShearPlaneY();
+    const near = ion => abs(ion.baseY - planeY) < ionicCrystalSpacing * 2.5;
+    const top = ionicCrystalAtoms.filter(ion => ion.row <= split && near(ion));
+    const bot = ionicCrystalAtoms.filter(ion => ion.row >  split && near(ion));
+    let dLike = Infinity;
+    const cand = [];
+    for (const a of top) for (const b of bot) {
+        if (a.isCat !== b.isCat) continue;
+        const d = dist(a.baseX + shift, a.baseY, b.baseX, b.baseY);
+        cand.push({ a, b, d });
+        dLike = min(dLike, d);
+    }
+    return cand.filter(p => p.d <= dLike * 1.05);
+}
+
 function drawIonicShearOverlay() {
     const pad    = ionicCrystalSpacing * 0.72;
     const leftX  = ionicCrystalStartX - pad;
-    const botY   = ionicCrystalStartY + (ionicCrystalRows - 1) * ionicCrystalSpacing + pad;
-    const shearY = ionicCrystalStartY + ionicCrystalSpacing * 1.5;
+    const botY   = ionicCrystalStartY + ionicCrystalH + pad;
+    const shearY = ionicShearPlaneY();
+    // Flecha a media altura del bloque que se desplaza
+    const arrowY = (ionicCrystalStartY + shearY) / 2 - ionicGapOffset * 0.45;
 
     // Flecha de fuerza
     let arrowEnd   = leftX - 8;
     let arrowStart = arrowEnd - 42;
     stroke('#F59E0B');
     strokeWeight(2.5);
-    line(arrowStart, shearY - ionicCrystalSpacing * 0.5,
-         arrowEnd,   shearY - ionicCrystalSpacing * 0.5);
+    line(arrowStart, arrowY, arrowEnd, arrowY);
     push();
-    translate(arrowEnd, shearY - ionicCrystalSpacing * 0.5);
+    translate(arrowEnd, arrowY);
     fill('#F59E0B'); noStroke();
     triangle(-9, 5, -9, -5, 0, 0);
     pop();
     noStroke(); fill('#F59E0B');
     textAlign(RIGHT, CENTER); textSize(11);
-    text('Fuerza', arrowStart - 4, shearY - ionicCrystalSpacing * 0.5);
+    text('Fuerza', arrowStart - 4, arrowY);
 
     if (!ionicShearAligned) {
         // Plano de cizalladura mientras se desplaza
         let regX = ionicCrystalStartX - pad;
-        let regW = (ionicCrystalCols - 1) * ionicCrystalSpacing + pad * 2 + ionicShearOffset;
+        let regW = ionicCrystalW + pad * 2 + ionicShearOffset;
         stroke(148, 163, 184, 75);
         strokeWeight(1);
         drawingContext.setLineDash([5, 4]);
@@ -2109,31 +2155,21 @@ function drawIonicShearOverlay() {
         drawingContext.setLineDash([]);
     } else {
         // Indicadores de repulsión entre iones de igual carga enfrentados
-        const row1Ions = ionicCrystalRowArrays[1] || [];
-        const row2Ions = ionicCrystalRowArrays[2] || [];
-        for (let r1 of row1Ions) {
-            let closest = null, closestDist = Infinity;
-            for (let r2 of row2Ions) {
-                if (r1.isCat !== r2.isCat) continue;
-                let dx = r1.x - r2.x, dy = r1.y - r2.y;
-                let d  = sqrt(dx * dx + dy * dy);
-                if (d < closestDist) { closestDist = d; closest = r2; }
-            }
-            if (closest && closestDist < ionicCrystalSpacing * 0.95) {
-                let mx = (r1.x + closest.x) / 2;
-                let my = (r1.y + closest.y) / 2;
-                // Línea de repulsión
-                stroke(239, 68, 68, constrain(ionicGapOffset * 3, 0, 180));
-                strokeWeight(1.5);
-                drawingContext.setLineDash([3, 3]);
-                line(r1.x, r1.y, closest.x, closest.y);
-                drawingContext.setLineDash([]);
-                // Símbolo
-                noStroke();
-                fill(239, 68, 68, constrain(ionicGapOffset * 4, 0, 200));
-                textAlign(CENTER, CENTER); textSize(11); textStyle(BOLD);
-                text('✕', mx, my);
-            }
+        if (!ionicShearPairsCache) ionicShearPairsCache = ionicShearRepulsionPairs();
+        for (const { a, b } of ionicShearPairsCache) {
+            let mx = (a.x + b.x) / 2;
+            let my = (a.y + b.y) / 2;
+            // Línea de repulsión
+            stroke(239, 68, 68, constrain(ionicGapOffset * 3, 0, 180));
+            strokeWeight(1.5);
+            drawingContext.setLineDash([3, 3]);
+            line(a.x, a.y, b.x, b.y);
+            drawingContext.setLineDash([]);
+            // Símbolo
+            noStroke();
+            fill(239, 68, 68, constrain(ionicGapOffset * 4, 0, 200));
+            textAlign(CENTER, CENTER); textSize(11); textStyle(BOLD);
+            text('✕', mx, my);
         }
         textStyle(NORMAL);
 
@@ -2141,7 +2177,6 @@ function drawIonicShearOverlay() {
         noStroke();
         let alpha = constrain(ionicGapOffset * 4, 0, 220);
         let msgY1 = min(botY + 22, height - 28);
-        let msgY2 = min(botY + 40, height - 10);
         if (ionicGapOffset > ionicCrystalSpacing * 0.4) {
             fill(239, 68, 68, alpha);
             textAlign(CENTER, CENTER); textSize(14); textStyle(BOLD);
@@ -2209,132 +2244,37 @@ function drawIonicCrystalButtons() {
     _crystalPauseBtnBounds = { x: paX, y: by, w: btnW, h: btnH };
 }
 
-// ─── Diagrama de fuerzas de Coulomb sobre el ión del plano de cizalladura ────
-function drawIonicForceDiagram() {
-    let cols = ionicCrystalCols;
-    let ref  = ionicCrystalAtoms[1 * cols + 3];   // fila 1, col 3
-    if (!ref) return;
-
-    let fadeAlpha = 210;
-
-    let s = ionicCrystalSpacing;
-
-    // ── 8 vecinos ─────────────────────────────────────────────────────────────
-    let dirs = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
-    let nbrs = [];
-    for (let [dr, dc] of dirs) {
-        let nr = ref.row + dr, nc = ref.col + dc;
-        if (nr < 0 || nr >= ionicCrystalRows || nc < 0 || nc >= cols) continue;
-        let nb = ionicCrystalAtoms[nr * cols + nc];
-        if (nb) nbrs.push({ nb, isDirect: Math.abs(dr) + Math.abs(dc) === 1 });
-    }
-
-    // ── Fuerzas de Coulomb (F ∝ s²/r²) ───────────────────────────────────────
-    let fvecs = [], resFx = 0, resFy = 0;
-    for (let { nb, isDirect } of nbrs) {
-        let dx = nb.x - ref.x, dy = nb.y - ref.y;
-        let r2 = dx * dx + dy * dy, r = sqrt(r2);
-        if (r < 2) continue;
-        let same = ref.isCat === nb.isCat;
-        let fMag = (s * s) / r2;
-        let sign = same ? -1 : 1;   // repulsión −, atracción +
-        let fx = sign * (dx / r) * fMag;
-        let fy = sign * (dy / r) * fMag;
-        resFx += fx; resFy += fy;
-        fvecs.push({ isDirect, same, fx, fy });
-    }
-
-    // ── Escala: vecino directo en reposo → 46 px ──────────────────────────────
-    // Fuerza de vecino directo en reposo = s²/s² = 1.0; usamos eso como referencia fija
-    // para que la escala no cambie según la configuración actual (más legible).
-    let aS = 46;
-
-    // ── Flechas de cada fuerza, desde la posición real del ión ───────────────
-    for (let f of fvecs) {
-        let col = f.same ? [239, 68, 68] : [52, 211, 153];
-        let sw  = f.isDirect ? 1.8 : 1.1;
-        _iArrow(ref.x, ref.y,
-                ref.x + f.fx * aS, ref.y + f.fy * aS,
-                col, fadeAlpha, sw, f.isDirect ? 5 : 4);
-    }
-
-    // ── Resultante ────────────────────────────────────────────────────────────
-    let resMag = sqrt(resFx * resFx + resFy * resFy);
-    if (resMag > 0.005) {
-        let ex = ref.x + resFx * aS, ey = ref.y + resFy * aS;
-        _iArrow(ref.x, ref.y, ex, ey, [251, 191, 36], fadeAlpha, 2.8, 8);
-        noStroke(); fill(251, 191, 36, fadeAlpha); textStyle(BOLD);
-        let ang = atan2(resFy, resFx);
-        textAlign(CENTER, CENTER); textSize(11);
-        text('R', ex + cos(ang + HALF_PI) * 12, ey + sin(ang + HALF_PI) * 12);
-        textStyle(NORMAL);
-    }
-
-    // ── Anillo indicador en el ión de referencia ──────────────────────────────
-    noFill(); stroke(251, 191, 36, 140); strokeWeight(1.5);
-    drawingContext.setLineDash([4, 3]);
-    circle(ref.x, ref.y, max(s * 0.38, 24) + 18);
-    drawingContext.setLineDash([]);
-
-    // ── Leyenda compacta (esquina inferior derecha del canvas) ────────────────
-    const lItems = _FORCE_LEGEND;
-    let lW = 152, lH = lItems.length * 16 + 10;
-    let lX = width  - lW - 14;
-    let lY = height - lH - 14;
-    noStroke(); fill(8, 14, 28, min(fadeAlpha * 0.88, 195));
-    rect(lX - 6, lY - 6, lW + 8, lH + 4, 7);
-    for (let i = 0; i < lItems.length; i++) {
-        let it = lItems[i], y = lY + i * 16 + 2;
-        let sw = i === 2 ? 2.2 : 1.5;
-        stroke(...it.col, fadeAlpha); strokeWeight(sw);
-        line(lX + 2, y, lX + 18, y);
-        push();
-        translate(lX + 18, y);
-        fill(...it.col, fadeAlpha); noStroke();
-        triangle(-5, 2.5, -5, -2.5, 0, 0);
-        pop();
-        noStroke(); fill(148, 163, 184, fadeAlpha * 0.85);
-        textAlign(LEFT, CENTER); textSize(9);
-        text(it.lbl, lX + 24, y);
-    }
-}
-
 // ─── Vectores de Coulomb para todos los iones del plano de cizalladura ────────
 function drawIonicShearLineForces() {
-    const cols   = ionicCrystalCols;
-    const rows   = ionicCrystalRows;
     const s      = ionicCrystalSpacing;
     const aS     = 28;          // escala más corta para no solapar entre átomos
     const alpha  = 195;
+    const reach  = s * 1.6;     // vecinos considerados
 
-    // Filas 1 y 2: las dos que bordean el plano de cizalladura
+    // Las dos filas que bordean el plano de cizalladura
+    const split = ionicLayer.shear.splitRow;
     const shearRows = [
-        ionicCrystalRowArrays[1] || [],
-        ionicCrystalRowArrays[2] || [],
+        ionicCrystalRowArrays[split]     || [],
+        ionicCrystalRowArrays[split + 1] || [],
     ];
-
-    const dirs = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
 
     for (const rowIons of shearRows) {
         for (const ref of rowIons) {
             let resFx = 0, resFy = 0;
             const fvecs = [];
 
-            for (const [dr, dc] of dirs) {
-                const nr = ref.row + dr, nc = ref.col + dc;
-                if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
-                const nb = ionicCrystalAtoms[nr * cols + nc];
-                if (!nb) continue;
+            for (const nb of ionicCrystalAtoms) {
+                if (nb === ref) continue;
                 const dx = nb.x - ref.x, dy = nb.y - ref.y;
                 const r2 = dx * dx + dy * dy, r = sqrt(r2);
-                if (r < 2) continue;
+                if (r < 2 || r > reach) continue;
                 const same = ref.isCat === nb.isCat;
                 const fMag = (s * s) / r2;
                 const sign = same ? -1 : 1;
                 const fx = sign * (dx / r) * fMag;
                 const fy = sign * (dy / r) * fMag;
                 resFx += fx; resFy += fy;
-                const isDirect = Math.abs(dr) + Math.abs(dc) === 1;
+                const isDirect = r <= s * 1.15;
                 fvecs.push({ isDirect, same, fx, fy });
             }
 
