@@ -401,14 +401,14 @@ function buildCrystalLayer(s) {
             rowQ[ys.findIndex(yy => Math.abs(yy - y) < 2e-3)] += qOf(site.kind);
         }
     }
-    const shear = _findShearPlane(ions, ys, L.w, dMin, rowQ);
+    const shear = _findShearPlane(ys, rowQ);
     return { ions, rowYs: ys, width, height, dMin, period: L.w, shear };
 }
 
 // Plano de cizalladura: entre los cortes que dejan dos bloques neutros, el
-// hueco más ancho entre filas (el más centrado en caso de empate). Desplazamiento: el que deja iones de igual carga lo más
-// cerca posible a ambos lados del plano.
-function _findShearPlane(ions, ys, period, dMin, rowQ) {
+// hueco más ancho entre filas (el más centrado en caso de empate). Cómo
+// responde el cristal al cizallarlo lo calcula js/crystal-shear.js.
+function _findShearPlane(ys, rowQ) {
     if (ys.length < 2) return null;
     const mid = (ys[0] + ys[ys.length - 1]) / 2;
     let best = 0, bestGap = -1, bestDist = Infinity, qTop = 0;
@@ -421,32 +421,8 @@ function _findShearPlane(ions, ys, period, dMin, rowQ) {
             best = k; bestGap = gap; bestDist = dMid;
         }
     }
-    const splitRow = best; // filas 0..splitRow forman el bloque superior
-    const top = ions.filter(p => p.row <= splitRow);
-    const bot = ions.filter(p => p.row >  splitRow);
-
-    // Solo importan las filas que bordean el plano y sus vecinas
-    const near = (p) => Math.abs(p.y - (ys[splitRow] + ys[splitRow + 1]) / 2) < 2.5 * dMin;
-    const topN = top.filter(near), botN = bot.filter(near);
-
-    let bestShift = period / 2, bestLike = Infinity;
-    const steps = 48;
-    for (let s = 1; s < steps; s++) {
-        const shift = (s / steps) * period;
-        let dLike = Infinity;
-        for (const p of topN) for (const q of botN) {
-            if (p.kind !== q.kind) continue;
-            // distancia horizontal mínima considerando la periodicidad
-            let dx = (p.x + shift - q.x) % period;
-            if (dx < 0) dx += period;
-            dx = Math.min(dx, period - dx);
-            dLike = Math.min(dLike, Math.hypot(dx, p.y - q.y));
-        }
-        if (dLike < bestLike - 1e-6) { bestLike = dLike; bestShift = shift; }
-    }
     return {
-        splitRow,
-        planeY: (ys[splitRow] + ys[splitRow + 1]) / 2,
-        shift: bestShift,
+        splitRow: best, // filas 0..splitRow forman el bloque superior
+        planeY: (ys[best] + ys[best + 1]) / 2,
     };
 }

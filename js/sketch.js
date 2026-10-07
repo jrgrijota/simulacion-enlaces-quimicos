@@ -79,7 +79,6 @@ let ionicCrystalStartX    = 0;
 let ionicCrystalStartY    = 0;
 let ionicCrystalAtoms     = [];
 let ionicCrystalPairs     = [];   // [ionA, ionB] vecinos catión–anión (atracción)
-let ionicShearPairsCache  = null; // pares de igual carga enfrentados al cizallar
 let ionicCrystalRowArrays = []; // cached per-row slices for fast access
 let ionicCatSym         = '';
 let ionicCatColor       = '';
@@ -87,10 +86,11 @@ let ionicCatCharge      = 0;
 let ionicAnSym          = '';
 let ionicAnColor        = '';
 let ionicAnCharge       = 0;
-let ionicShearOffset    = 0;
-let ionicShearTarget    = 0;
-let ionicShearAligned   = false;
-let ionicGapOffset      = 0;
+let ionicShearModel     = null;  // modelo físico de la interfaz (js/crystal-shear.js)
+let ionicShearState     = null;  // dinámica del bloque superior
+let ionicShearFrac      = 0;     // fuerza aplicada / resistencia del cristal
+let ionicShearOpen      = 0;     // apertura de la grieta tras la rotura (px)
+const SHEAR_SLIDER_MAX  = 150;   // el slider llega al 150 % de la resistencia
 let ionicVibTime        = 0;
 let ionicShowShearForces  = false;
 let ionicShowElectrons    = false;
@@ -289,10 +289,10 @@ function initSimulation() {
     elMetallicInfo      = null;
     ionicCrystalMode    = false;
     ionicCrystalPhase   = 'normal';
-    ionicShearOffset    = 0;
-    ionicShearTarget    = 0;
-    ionicShearAligned   = false;
-    ionicGapOffset      = 0;
+    ionicShearModel     = null;
+    ionicShearState     = null;
+    ionicShearFrac      = 0;
+    ionicShearOpen      = 0;
     ionicVibTime          = 0;
 
     ionicShowShearForces   = false;
@@ -1647,10 +1647,10 @@ function enterIonicCrystal() {
 
     ionicCrystalMode   = true;
     ionicCrystalPhase  = 'normal';
-    ionicShearOffset   = 0;
-    ionicShearTarget   = 0;
-    ionicShearAligned  = false;
-    ionicGapOffset     = 0;
+    ionicShearModel    = null; // se construye al usar la cizalladura
+    ionicShearState    = null;
+    ionicShearFrac     = 0;
+    ionicShearOpen     = 0;
     ionicVibTime       = 0;
 
     let ctrlRow = document.getElementById('atom-controls-row');
@@ -1697,7 +1697,6 @@ function initIonicCrystalGrid() {
     ionicCrystalAtoms     = [];
     ionicCrystalRowArrays = [];
     ionicCrystalPairs     = [];
-    ionicShearPairsCache  = null;
     if (!ionicLayer) return;
     const L = ionicLayer;
 
@@ -1837,7 +1836,8 @@ function buildIonicCrystalInfoCard() {
 
     let viewText;
     if (ionicView === '2d') {
-        viewText = 'Vista de una <b>capa</b> de la red: conserva la proporción de iones del cristal.';
+        viewText = 'Vista de una <b>capa</b> de la red: conserva la proporción de iones del cristal.' +
+                   (s.layerNote ? ' ' + s.layerNote : '');
     } else if (s.id === 'cdcl2') {
         viewText = `Se muestran dos <b>láminas</b> ${s.an.sym}–${s.cat.sym}–${s.an.sym}. Entre láminas las fuerzas son débiles, por eso el cristal se separa en escamas.`;
     } else {
@@ -1868,9 +1868,7 @@ function setIonicView(view) {
     ionicView = view;
     // Al cambiar de vista se parte de la red en reposo
     ionicCrystalPhase = 'normal';
-    ionicShearOffset  = 0;
-    ionicShearAligned = false;
-    ionicGapOffset    = 0;
+    resetIonicShear();
     ionicShowShearForces = false;
     ionicShowElectrons   = false;
     selectIonic3DIon(-1);
@@ -1924,24 +1922,22 @@ function buildIonicCrystal2DControls() {
             elBtnIonicVoltage2.html('⚡ Aplicar voltaje');
         } else {
             ionicCrystalPhase = 'voltage';
-            ionicShearOffset = 0; ionicShearTarget = 0;
-            ionicShearAligned = false; ionicGapOffset = 0;
-            if (elSliderShear)      { elSliderShear.elt.value = '0'; }
-            if (elSliderShearLabel) { elSliderShearLabel.html('0%'); }
+            resetIonicShear();
+            ionicCrystalPhase = 'voltage';
             elBtnIonicVoltage2.html('■ Quitar voltaje');
         }
     });
     expBody.child(elBtnIonicVoltage2);
 
-    // ── Slider de cizalladura ──────────────────────────────────
+    // ── Fuerza de cizalladura (en % de la resistencia del cristal) ──
     let shearRow = createDiv();
     shearRow.style('display', 'flex').style('justify-content', 'space-between')
             .style('align-items', 'center').style('margin-bottom', '4px');
-    let shearLblText = createDiv('Fuerza de cizalladura');
+    let shearLblText = createDiv('Fuerza lateral aplicada');
     shearLblText.style('font-size', '11px').style('color', 'var(--text-muted)');
-    elSliderShearLabel = createDiv('0%');
+    elSliderShearLabel = createDiv('0 %');
     elSliderShearLabel.style('font-size', '11px').style('color', 'var(--accent)')
-                      .style('font-weight', '600').style('min-width', '34px')
+                      .style('font-weight', '600').style('min-width', '40px')
                       .style('text-align', 'right');
     shearRow.child(shearLblText);
     shearRow.child(elSliderShearLabel);
@@ -1950,37 +1946,39 @@ function buildIonicCrystal2DControls() {
     elSliderShear = createElement('input');
     elSliderShear.attribute('type', 'range');
     elSliderShear.attribute('min', '0');
-    elSliderShear.attribute('max', '100');
+    elSliderShear.attribute('max', String(SHEAR_SLIDER_MAX));
     elSliderShear.attribute('value', '0');
     elSliderShear.style('width', '100%').style('cursor', 'pointer')
-                 .style('accent-color', 'var(--accent)').style('margin-bottom', '4px');
+                 .style('accent-color', 'var(--accent)').style('margin-bottom', '2px');
     elSliderShear.elt.addEventListener('input', () => {
         const v = parseInt(elSliderShear.elt.value);
-        if (v === 0) {
-            ionicCrystalPhase = 'normal';
-            ionicShearOffset  = 0;
-            ionicShearAligned = false;
-            ionicGapOffset    = 0;
-            elSliderShearLabel.html('0%');
-        } else {
-            if (ionicCrystalPhase !== 'shear') {
-                ionicCrystalPhase = 'shear';
-                elBtnIonicVoltage2.html('⚡ Aplicar voltaje');
-            }
-            // Desplazamiento máximo: el que enfrenta iones de igual carga
-            ionicShearOffset  = (v / 100) * ionicShearShiftPx();
-            ionicShearAligned = v >= 100;
-            if (!ionicShearAligned) ionicGapOffset = 0;
-            const lbl = v >= 95 ? '¡Fractura!' : v + '%';
-            elSliderShearLabel.html(`<span style="color:${v >= 95 ? '#EF4444' : 'var(--accent)'}">${lbl}</span>`);
+        ensureIonicShearModel();
+        ionicShearFrac = v / 100;
+        if (v > 0 && ionicCrystalPhase !== 'shear') {
+            ionicCrystalPhase = 'shear';
+            ionicVibTime = 0;
+            elBtnIonicVoltage2.html('⚡ Aplicar voltaje');
         }
+        updateShearSliderLabel();
+        if (!isLooping()) redraw();
     });
     expBody.child(elSliderShear);
 
-    let shearHint = createDiv('← arrastra para aplicar fuerza lateral →');
-    shearHint.style('font-size', '10px').style('color', 'var(--text-muted)')
-             .style('text-align', 'center').style('opacity', '0.7');
-    expBody.child(shearHint);
+    // Marca del 100 % (resistencia del cristal) bajo el slider
+    let scale = createDiv();
+    scale.style('position', 'relative').style('height', '14px').style('font-size', '9.5px')
+         .style('color', 'var(--text-muted)');
+    const pct = (100 / SHEAR_SLIDER_MAX) * 100;
+    let tick = createDiv('▲ resistencia');
+    tick.style('position', 'absolute').style('left', `calc(${pct}% - 6px)`).style('white-space', 'nowrap')
+        .style('color', '#F59E0B');
+    scale.child(tick);
+    expBody.child(scale);
+
+    let resetShear = createButton('↺ Recomponer el cristal');
+    resetShear.style('width', '100%').style('margin-top', '6px').style('font-size', '11px');
+    resetShear.mousePressed(() => { resetIonicShear(); if (!isLooping()) redraw(); });
+    expBody.child(resetShear);
 
     expCard.child(expBody);
     uiContainer.child(expCard);
@@ -2002,7 +2000,7 @@ function buildIonicCrystal2DControls() {
     sChk.style('width', '14px').style('height', '14px').style('cursor', 'pointer')
         .style('accent-color', 'var(--accent)');
     sChk.elt.checked = false;
-    let sLbl = createElement('label', 'Fuerzas en plano de cizalladura');
+    let sLbl = createElement('label', 'Fuerzas entre los dos bloques');
     sLbl.attribute('for', 'chk-shear-forces');
     sLbl.style('font-size', '11.5px').style('color', 'var(--text-label)')
         .style('cursor', 'pointer').style('user-select', 'none');
@@ -2056,19 +2054,7 @@ function updateIonicCrystalPhysics() {
             ion.y = ion.baseY + cos(ionicVibTime * 1.9 + ion.vibPhase) * 2.8;
         }
     } else if (ionicCrystalPhase === 'shear') {
-        // ionicShearOffset is driven directly by the slider
-        if (ionicShearAligned) {
-            ionicGapOffset = lerp(ionicGapOffset, ionicCrystalSpacing * 1.5, 0.028);
-        }
-        for (let ion of ionicCrystalAtoms) {
-            if (ion.row <= ionicLayer.shear.splitRow) { // bloque sobre el plano
-                ion.x = ion.baseX + ionicShearOffset;
-                ion.y = ion.baseY - ionicGapOffset * 0.45;
-            } else {
-                ion.x = ion.baseX;
-                ion.y = ion.baseY + ionicGapOffset * 0.28;
-            }
-        }
+        updateIonicShearPhysics();
     } else {
         for (let ion of ionicCrystalAtoms) {
             ion.x = lerp(ion.x, ion.baseX, 0.09);
@@ -2100,11 +2086,15 @@ function drawIonicCrystalBg() {
 }
 
 function drawIonicCoulombLines() {
-    if (ionicCrystalPhase === 'shear' && ionicGapOffset > ionicCrystalSpacing * 0.2) return;
     drawingContext.setLineDash([3, 4]);
     strokeWeight(1);
     stroke(255, 255, 255, 16);
-    for (const [a, b] of ionicCrystalPairs) line(a.x, a.y, b.x, b.y);
+    const split = ionicLayer.shear.splitRow;
+    const cracked = ionicCrystalPhase === 'shear' && ionicShearState && ionicShearState.fractured;
+    for (const [a, b] of ionicCrystalPairs) {
+        if (cracked && (a.row <= split) !== (b.row <= split)) continue;
+        line(a.x, a.y, b.x, b.y);
+    }
     drawingContext.setLineDash([]);
 }
 
@@ -2215,9 +2205,74 @@ function drawIonicVoltageOverlay() {
     text('(conduciría fundido o en disolución acuosa)', width / 2, msgY2);
 }
 
-// Desplazamiento (px) que enfrenta iones de igual carga a ambos lados del plano
-function ionicShearShiftPx() {
-    return ionicLayer && ionicLayer.shear ? ionicLayer.shear.shift * ionicLayerScale : ionicCrystalSpacing;
+// ─── Cizalladura: modelo físico (js/crystal-shear.js) ────────────────────────
+function ensureIonicShearModel() {
+    if (ionicShearModel || !ionicStructure || !ionicLayer) return;
+    ionicShearModel = buildShearModel(ionicStructure, ionicLayer);
+    ionicShearState = createShearState(ionicShearModel);
+}
+
+// Vuelve a la red en reposo (también tras una fractura)
+function resetIonicShear() {
+    if (ionicShearModel) ionicShearState = createShearState(ionicShearModel);
+    ionicShearFrac = 0;
+    ionicShearOpen = 0;
+    if (ionicCrystalPhase === 'shear') ionicCrystalPhase = 'normal';
+    if (elSliderShear) elSliderShear.elt.value = '0';
+    updateShearSliderLabel();
+}
+
+function updateShearSliderLabel() {
+    if (!elSliderShearLabel) return;
+    const v = Math.round(ionicShearFrac * 100);
+    const col = v >= 100 ? '#EF4444' : 'var(--accent)';
+    elSliderShearLabel.html(`<span style="color:${col}">${v} %</span>`);
+}
+
+// Régimen actual: 'rest' | 'elastic' | 'slip' | 'fracture' | 'layers'
+function ionicShearRegime() {
+    const st = ionicShearState, m = ionicShearModel;
+    if (!st || !m) return 'rest';
+    if (st.fractured) return 'fracture';
+    const slid = Math.abs(st.dx) > m.dxAtTau;
+    if (ionicStructure.layered && (slid || ionicShearFrac > 1)) return 'layers';
+    if (slid || ionicShearFrac > 1) return 'slip';
+    if (ionicShearFrac > 0 || Math.abs(st.dx) > 1e-3) return 'elastic';
+    return 'rest';
+}
+
+function updateIonicShearPhysics() {
+    const st = ionicShearState, m = ionicShearModel;
+    if (!st || !m) return;
+    if (!st.fractured) {
+        stepShear(st, m, ionicShearFrac * m.tauMax);
+    } else {
+        // Rota la unión, la repulsión separa los bloques
+        ionicShearOpen = lerp(ionicShearOpen, ionicCrystalSpacing * 1.4, 0.03);
+    }
+    // La red es periódica a lo largo del plano: un deslizamiento de varios
+    // periodos (láminas) se dibuja módulo el periodo
+    const P     = m.period;
+    const dxPx  = (st.dx - P * Math.floor(st.dx / P)) * ionicLayerScale;
+    const dyPx  = st.dy * ionicLayerScale;
+    const split = ionicLayer.shear.splitRow;
+    for (const ion of ionicCrystalAtoms) {
+        if (ion.row <= split) { // bloque sobre el plano
+            ion.x = ion.baseX + dxPx;
+            ion.y = ion.baseY - dyPx - ionicShearOpen * 0.7;
+        } else {
+            ion.x = ion.baseX;
+            ion.y = ion.baseY + ionicShearOpen * 0.3;
+        }
+    }
+    // Sin fuerza y otra vez en reposo: fin del experimento
+    if (!st.fractured && ionicShearFrac === 0 && Math.abs(st.vx) + Math.abs(st.vy) < 1e-4) {
+        const off = st.dx - P * Math.round(st.dx / P);
+        if (Math.abs(off) < 1e-3 && Math.abs(st.dy) < 1e-3) {
+            ionicShearState = createShearState(m);
+            ionicCrystalPhase = 'normal';
+        }
+    }
 }
 
 // Y (px) del plano de cizalladura en reposo
@@ -2225,93 +2280,87 @@ function ionicShearPlaneY() {
     return ionicCrystalStartY + ionicLayer.shear.planeY * ionicLayerScale;
 }
 
-// Pares de iones de igual carga enfrentados a través del plano cuando el
-// bloque superior se ha desplazado del todo (se calcula sobre posiciones base)
-function ionicShearRepulsionPairs() {
-    const split = ionicLayer.shear.splitRow;
-    const shift = ionicShearShiftPx();
-    const planeY = ionicShearPlaneY();
-    const near = ion => abs(ion.baseY - planeY) < ionicCrystalSpacing * 2.5;
-    const top = ionicCrystalAtoms.filter(ion => ion.row <= split && near(ion));
-    const bot = ionicCrystalAtoms.filter(ion => ion.row >  split && near(ion));
-    let dLike = Infinity;
-    const cand = [];
-    for (const a of top) for (const b of bot) {
-        if (a.isCat !== b.isCat) continue;
-        const d = dist(a.baseX + shift, a.baseY, b.baseX, b.baseY);
-        cand.push({ a, b, d });
-        dLike = min(dLike, d);
-    }
-    return cand.filter(p => p.d <= dLike * 1.05);
-}
-
 function drawIonicShearOverlay() {
     const pad    = ionicCrystalSpacing * 0.72;
     const leftX  = ionicCrystalStartX - pad;
     const botY   = ionicCrystalStartY + ionicCrystalH + pad;
     const shearY = ionicShearPlaneY();
-    // Flecha a media altura del bloque que se desplaza
-    const arrowY = (ionicCrystalStartY + shearY) / 2 - ionicGapOffset * 0.45;
+    const st     = ionicShearState;
+    const lift   = st ? st.dy * ionicLayerScale + ionicShearOpen * 0.7 : 0;
+    const broken = !!(st && st.fractured);
 
-    // Flecha de fuerza
-    let arrowEnd   = leftX - 8;
-    let arrowStart = arrowEnd - 42;
-    stroke('#F59E0B');
-    strokeWeight(2.5);
-    line(arrowStart, arrowY, arrowEnd, arrowY);
-    push();
-    translate(arrowEnd, arrowY);
-    fill('#F59E0B'); noStroke();
-    triangle(-9, 5, -9, -5, 0, 0);
-    pop();
-    noStroke(); fill('#F59E0B');
-    textAlign(RIGHT, CENTER); textSize(11);
-    text('Fuerza', arrowStart - 4, arrowY);
+    // Flecha de la fuerza aplicada (longitud ∝ fuerza), a media altura del bloque superior
+    if (ionicShearFrac > 0 && !broken) {
+        const arrowY   = (ionicCrystalStartY + shearY) / 2 - lift;
+        const arrowEnd = leftX - 8;
+        const len      = 14 + ionicShearFrac * 34;
+        const col      = ionicShearFrac > 1 ? '#EF4444' : '#F59E0B';
+        stroke(col);
+        strokeWeight(2.5);
+        line(arrowEnd - len, arrowY, arrowEnd, arrowY);
+        push();
+        translate(arrowEnd, arrowY);
+        fill(col); noStroke();
+        triangle(-9, 5, -9, -5, 0, 0);
+        pop();
+        noStroke(); fill(col);
+        textAlign(RIGHT, CENTER); textSize(11);
+        text('F', arrowEnd - len - 5, arrowY);
+    }
 
-    if (!ionicShearAligned) {
-        // Plano de cizalladura mientras se desplaza
-        let regX = ionicCrystalStartX - pad;
-        let regW = ionicCrystalW + pad * 2 + ionicShearOffset;
+    // Plano de cizalladura
+    if (!broken) {
         stroke(148, 163, 184, 75);
         strokeWeight(1);
         drawingContext.setLineDash([5, 4]);
-        line(regX, shearY, regX + regW, shearY);
+        line(ionicCrystalStartX - pad, shearY, ionicCrystalStartX + ionicCrystalW + pad, shearY);
         drawingContext.setLineDash([]);
-    } else {
-        // Indicadores de repulsión entre iones de igual carga enfrentados
-        if (!ionicShearPairsCache) ionicShearPairsCache = ionicShearRepulsionPairs();
-        for (const { a, b } of ionicShearPairsCache) {
-            let mx = (a.x + b.x) / 2;
-            let my = (a.y + b.y) / 2;
-            // Línea de repulsión
-            stroke(239, 68, 68, constrain(ionicGapOffset * 3, 0, 180));
+    }
+
+    // Iones de igual carga enfrentados a través del plano (repulsión)
+    const split = ionicLayer.shear.splitRow;
+    const s = ionicCrystalSpacing;
+    const topRows = [ionicCrystalRowArrays[split] || [], ionicCrystalRowArrays[split - 1] || []];
+    const botRows = [ionicCrystalRowArrays[split + 1] || [], ionicCrystalRowArrays[split + 2] || []];
+    textStyle(BOLD);
+    for (const ra of topRows) for (const a of ra) {
+        for (const rb of botRows) for (const b of rb) {
+            if (a.isCat !== b.isCat) continue;
+            const d = dist(a.x, a.y, b.x, b.y);
+            if (d > s * 1.35) continue;
+            // más intenso cuanto más cerca
+            const k = constrain(map(d, s * 1.35, s * 0.9, 0, 1), 0, 1);
+            stroke(239, 68, 68, 200 * k);
             strokeWeight(1.5);
             drawingContext.setLineDash([3, 3]);
             line(a.x, a.y, b.x, b.y);
             drawingContext.setLineDash([]);
-            // Símbolo
             noStroke();
-            fill(239, 68, 68, constrain(ionicGapOffset * 4, 0, 200));
-            textAlign(CENTER, CENTER); textSize(11); textStyle(BOLD);
-            text('✕', mx, my);
+            fill(239, 68, 68, 220 * k);
+            textAlign(CENTER, CENTER); textSize(11);
+            text('✕', (a.x + b.x) / 2, (a.y + b.y) / 2);
         }
-        textStyle(NORMAL);
+    }
+    textStyle(NORMAL);
 
-        // Mensaje de fractura
+    // Mensaje según el régimen
+    const msgs = {
+        elastic:  ['#F59E0B', 'Deformación elástica', 'Las atracciones entre iones resisten la fuerza; al soltar, la red recupera su forma'],
+        slip:     ['#EF4444', 'Las capas deslizan', 'Se acercan iones de igual carga: aparece una fuerte repulsión'],
+        fracture: ['#EF4444', '¡Fractura! — el cristal iónico es frágil', 'La repulsión entre iones de igual carga separa las capas'],
+        layers:   ['#38BDF8', 'Las láminas deslizan unas sobre otras', 'Entre láminas solo hay fuerzas débiles (van der Waals): el cristal se exfolia'],
+    };
+    const msg = msgs[ionicShearRegime()];
+    if (msg) {
+        const msgY1 = min(botY + 22, height - 30);
+        const msgY2 = min(botY + 40, height - 12);
         noStroke();
-        let alpha = constrain(ionicGapOffset * 4, 0, 220);
-        let msgY1 = min(botY + 22, height - 28);
-        if (ionicGapOffset > ionicCrystalSpacing * 0.4) {
-            fill(239, 68, 68, alpha);
-            textAlign(CENTER, CENTER); textSize(14); textStyle(BOLD);
-            text('¡Fractura! — el cristal iónico es frágil', width / 2, msgY1);
-            textStyle(NORMAL);
-        } else {
-            fill(239, 68, 68, alpha + 60);
-            textAlign(CENTER, CENTER); textSize(13); textStyle(BOLD);
-            text('Cargas iguales enfrentadas → repulsión → fractura', width / 2, msgY1);
-        }
+        textAlign(CENTER, CENTER);
+        fill(msg[0]); textSize(14); textStyle(BOLD);
+        text(msg[1], width / 2, msgY1);
         textStyle(NORMAL);
+        fill('#94A3B8'); textSize(11);
+        text(msg[2], width / 2, msgY2);
     }
 }
 
@@ -2368,54 +2417,46 @@ function drawIonicCrystalButtons() {
     _crystalPauseBtnBounds = { x: paX, y: by, w: btnW, h: btnH };
 }
 
-// ─── Vectores de Coulomb para todos los iones del plano de cizalladura ────────
+// ─── Fuerzas de Coulomb entre los dos bloques (iones junto al plano) ─────────
+// F ∝ q₁·q₂ / r², solo con los iones del otro lado del plano: en reposo
+// predominan las atracciones; al deslizar aparecen las repulsiones.
 function drawIonicShearLineForces() {
     const s      = ionicCrystalSpacing;
-    const aS     = 28;          // escala más corta para no solapar entre átomos
     const alpha  = 195;
-    const reach  = s * 1.6;     // vecinos considerados
+    const reach  = s * 2.2;
+    const split  = ionicLayer.shear.splitRow;
+    // Escala: atracción catión–anión a la distancia de enlace ↔ 30 px
+    const f0 = (abs(ionicCatCharge) * abs(ionicAnCharge)) / (s * s);
+    const aS = 30 / f0;
 
-    // Las dos filas que bordean el plano de cizalladura
-    const split = ionicLayer.shear.splitRow;
     const shearRows = [
         ionicCrystalRowArrays[split]     || [],
         ionicCrystalRowArrays[split + 1] || [],
     ];
-
     for (const rowIons of shearRows) {
         for (const ref of rowIons) {
+            const refTop = ref.row <= split;
+            const qRef = ref.isCat ? ionicCatCharge : ionicAnCharge;
             let resFx = 0, resFy = 0;
             const fvecs = [];
-
             for (const nb of ionicCrystalAtoms) {
-                if (nb === ref) continue;
+                if ((nb.row <= split) === refTop) continue; // solo el otro bloque
                 const dx = nb.x - ref.x, dy = nb.y - ref.y;
                 const r2 = dx * dx + dy * dy, r = sqrt(r2);
                 if (r < 2 || r > reach) continue;
-                const same = ref.isCat === nb.isCat;
-                const fMag = (s * s) / r2;
-                const sign = same ? -1 : 1;
-                const fx = sign * (dx / r) * fMag;
-                const fy = sign * (dy / r) * fMag;
+                const qNb  = nb.isCat ? ionicCatCharge : ionicAnCharge;
+                const fMag = -(qRef * qNb) / r2;          // > 0: atracción (hacia nb)
+                const fx = (dx / r) * fMag, fy = (dy / r) * fMag;
                 resFx += fx; resFy += fy;
-                const isDirect = r <= s * 1.15;
-                fvecs.push({ isDirect, same, fx, fy });
+                fvecs.push({ same: qRef * qNb > 0, fx, fy, near: r <= s * 1.3 });
             }
-
-            // Flechas individuales
             for (const f of fvecs) {
-                const col = f.same ? [239, 68, 68] : [52, 211, 153];
-                const sw  = f.isDirect ? 1.5 : 0.9;
-                _iArrow(ref.x, ref.y,
-                        ref.x + f.fx * aS, ref.y + f.fy * aS,
-                        col, alpha, sw, f.isDirect ? 4 : 3);
+                _iArrow(ref.x, ref.y, ref.x + f.fx * aS, ref.y + f.fy * aS,
+                        f.same ? [239, 68, 68] : [52, 211, 153], alpha * (f.near ? 1 : 0.6),
+                        f.near ? 1.5 : 0.9, f.near ? 4 : 3);
             }
-
-            // Resultante
-            const resMag = sqrt(resFx * resFx + resFy * resFy);
-            if (resMag > 0.005) {
-                const ex = ref.x + resFx * aS, ey = ref.y + resFy * aS;
-                _iArrow(ref.x, ref.y, ex, ey, [251, 191, 36], alpha, 2.2, 6);
+            if (sqrt(resFx * resFx + resFy * resFy) * aS > 3) {
+                _iArrow(ref.x, ref.y, ref.x + resFx * aS, ref.y + resFy * aS, [251, 191, 36], alpha, 2.2, 6);
             }
         }
     }
