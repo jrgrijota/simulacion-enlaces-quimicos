@@ -275,6 +275,9 @@ function initSimulation() {
 
     uiContainer.html('');
     clearAtomControls();
+    // Las vistas de red ocultan el botón de pausa de la barra lateral
+    let pauseBtnEl = document.getElementById('pause-btn');
+    if (pauseBtnEl) pauseBtnEl.style.display = '';
 
     atoms          = [];
     atomSelects    = [];
