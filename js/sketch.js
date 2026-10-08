@@ -2656,7 +2656,7 @@ function buildMetallicUI() {
             elBtnDeform.html('↔ Deformar red');
         } else {
             metallicPhase = 'deform';
-            deformTarget  = latticeSpacing * 0.5;
+            deformTarget  = latticeSpacing;   // un periodo: los iones vuelven a posiciones de red
             deformDone    = false;
             elBtnVoltage.html('⚡ Aplicar voltaje');
             elBtnDeform.html('↺ Restaurar red');
@@ -2729,15 +2729,23 @@ function updateMetallicElectrons() {
             if (e.x < minX) e.x = maxX;
             if (e.y < minY || e.y > maxY) { e.vy *= -1; e.y = constrain(e.y, minY, maxY); }
         } else {
-            if (e.x < minX || e.x > maxX) { e.vx *= -1; e.x = constrain(e.x, minX, maxX); }
+            // Con la red deformada, la mitad superior del mar está desplazada
+            let dx = metallicPhase === 'deform' && e.y < shearPlaneY() ? deformOffset : 0;
+            if (e.x < minX + dx || e.x > maxX + dx) { e.vx *= -1; e.x = constrain(e.x, minX + dx, maxX + dx); }
             if (e.y < minY || e.y > maxY) { e.vy *= -1; e.y = constrain(e.y, minY, maxY); }
         }
     }
 }
 
+// Plano de deslizamiento: entre la fila 1 y la fila 2 de la red metálica.
+function shearPlaneY() { return latticeStartY + latticeSpacing * 1.5; }
+
 function updateDeformAnim() {
     if (metallicPhase !== 'deform' || deformDone) return;
+    let prev = deformOffset;
     deformOffset = lerp(deformOffset, deformTarget, 0.025);
+    // Los electrones de la mitad superior viajan con sus cationes
+    for (let e of freeElectrons) if (e.y < shearPlaneY()) e.x += deformOffset - prev;
     if (abs(deformOffset - deformTarget) < 0.8) {
         deformOffset = deformTarget;
         deformDone   = true;
@@ -2756,14 +2764,23 @@ function drawMetallicSeaBg() {
     const rh     = (LATTICE_ROWS - 1) * latticeSpacing + pad * 2;
     const pulse  = sin(frameCount * 0.022) * 0.5 + 0.5;
 
-    noStroke();
-    fill(cR, cG, cB, 11 + pulse * 7);
-    rect(rx, ry, rw, rh, 16);
+    // Con la red deformada, la mitad superior (filas 0 y 1) se desliza con
+    // su parte del mar: se dibujan las dos mitades por separado.
+    const dx     = metallicPhase === 'deform' ? deformOffset : 0;
+    const shearY = shearPlaneY();
+    const partes = dx > 0
+        ? [[rx + dx, ry, rw, shearY - ry, 16, 16, 0, 0], [rx, shearY, rw, ry + rh - shearY, 0, 0, 16, 16]]
+        : [[rx, ry, rw, rh, 16, 16, 16, 16]];
 
-    noFill();
-    stroke(cR, cG, cB, 52 + pulse * 32);
-    strokeWeight(1.5);
-    rect(rx, ry, rw, rh, 16);
+    for (const p of partes) {
+        noStroke();
+        fill(cR, cG, cB, 11 + pulse * 7);
+        rect(...p);
+        noFill();
+        stroke(cR, cG, cB, 52 + pulse * 32);
+        strokeWeight(1.5);
+        rect(...p);
+    }
 }
 
 // ── Red cristalina de cationes ────────────────────────────────
@@ -2876,7 +2893,7 @@ function drawDeformOverlay() {
     const pad     = latticeSpacing * 0.65;
     const leftX   = latticeStartX - pad;
     const botY    = latticeStartY + (LATTICE_ROWS - 1) * latticeSpacing + pad;
-    const shearY  = latticeStartY + latticeSpacing * 1.5; // entre fila 1 y fila 2
+    const shearY  = shearPlaneY();
 
     // Flecha de fuerza sobre la mitad superior
     let arrowEnd   = leftX - 8;
