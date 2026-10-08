@@ -139,9 +139,23 @@ function maxElectronRadius(atomList) {
 // ============================================================
 // p5.js LIFECYCLE
 // ============================================================
+// Tamaño lógico del lienzo: el del marco. En pantallas estrechas no baja de
+// 720×540, porque los átomos se dibujan con radios de capa fijos y no caben en
+// menos; entonces el lienzo se escala solo visualmente (ver @media en style.css).
+const MIN_CANVAS_W = 720;
+function frameCanvasSize() {
+    let frame = document.getElementById('sim-frame');
+    if (frame.offsetWidth < MIN_CANVAS_W) return { w: MIN_CANVAS_W, h: MIN_CANVAS_W * 3 / 4 };
+    return { w: frame.offsetWidth, h: frame.offsetHeight };
+}
+function fitCanvasToFrame() {
+    let s = frameCanvasSize();
+    resizeCanvas(s.w, s.h);
+}
+
 function setup() {
-    let cont = document.getElementById('sim-frame');
-    let cnv  = createCanvas(cont.offsetWidth, cont.offsetHeight);
+    let s    = frameCanvasSize();
+    let cnv  = createCanvas(s.w, s.h);
     cnv.parent('sim-frame');
     frameRate(60);
     _BOND_COLOR_OBJ        = color(BOND_COLOR);
@@ -182,8 +196,7 @@ function draw() {
 }
 
 function windowResized() {
-    let cont = document.getElementById('sim-frame');
-    resizeCanvas(cont.offsetWidth, cont.offsetHeight);
+    fitCanvasToFrame();
     repositionForNewSize();
 }
 
@@ -234,8 +247,7 @@ function handleModeChange() {
     let ctrlRow = document.getElementById('atom-controls-row');
     let showRow = currentMode === 'IONIC' || currentMode === 'COVALENT';
     if (ctrlRow) ctrlRow.style.display = showRow ? 'flex' : 'none';
-    let frame = document.getElementById('sim-frame');
-    if (frame) resizeCanvas(frame.offsetWidth, frame.offsetHeight);
+    fitCanvasToFrame();
     initSimulation();
 }
 
@@ -1692,8 +1704,7 @@ function enterIonicCrystal() {
     if (ctrlRow) ctrlRow.style.display = 'none';
     let pauseBtn = document.getElementById('pause-btn');
     if (pauseBtn) pauseBtn.style.display = 'none';
-    let frame = document.getElementById('sim-frame');
-    if (frame) resizeCanvas(frame.offsetWidth, frame.offsetHeight);
+    fitCanvasToFrame();
 
     uiContainer.html('');
     initIonicCrystalGrid();
@@ -1719,8 +1730,7 @@ function exitIonicCrystal() {
     if (ctrlRow) ctrlRow.style.display = 'flex';
     let pauseBtn = document.getElementById('pause-btn');
     if (pauseBtn) pauseBtn.style.display = '';
-    let frame = document.getElementById('sim-frame');
-    if (frame) resizeCanvas(frame.offsetWidth, frame.offsetHeight);
+    fitCanvasToFrame();
 
     uiContainer.html('');
     buildIonicUI();

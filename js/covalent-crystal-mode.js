@@ -17,8 +17,7 @@ function enterCovalentCrystal() {
     if (ctrlRow) ctrlRow.style.display = 'none';
     let pauseBtn = document.getElementById('pause-btn');
     if (pauseBtn) pauseBtn.style.display = 'none';
-    let frame = document.getElementById('sim-frame');
-    if (frame) resizeCanvas(frame.offsetWidth, frame.offsetHeight);
+    fitCanvasToFrame();
 
     selectCovalentCrystal(covCrystalId);
 }
@@ -36,8 +35,7 @@ function exitCovalentCrystal() {
     if (ctrlRow) ctrlRow.style.display = 'flex';
     let pauseBtn = document.getElementById('pause-btn');
     if (pauseBtn) pauseBtn.style.display = '';
-    let frame = document.getElementById('sim-frame');
-    if (frame) resizeCanvas(frame.offsetWidth, frame.offsetHeight);
+    fitCanvasToFrame();
 
     uiContainer.html('');
     buildCovalentUI();

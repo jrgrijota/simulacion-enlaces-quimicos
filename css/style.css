@@ -296,7 +296,9 @@ button:disabled { opacity: 0.28; cursor: not-allowed; }
     box-shadow: 0 0 0 1px rgba(59,130,246,0.06), 0 4px 24px rgba(0,0,0,0.45);
 }
 
-#sim-frame canvas { display: block; }
+/* El lienzo ocupa el ancho del marco; si es más estrecho que el tamaño lógico
+   mínimo (720 px, ver frameCanvasSize en sketch.js) se escala visualmente. */
+#sim-frame canvas { display: block; width: 100% !important; height: auto !important; }
 
 /* ─── ATOM CONTROLS ROW ───────────────────────── */
 #atom-controls-row {
@@ -408,4 +410,24 @@ button:disabled { opacity: 0.28; cursor: not-allowed; }
     border-color: var(--danger);
     color: var(--danger);
     background: rgba(239, 68, 68, 0.08);
+}
+
+/* ─── PANTALLAS ESTRECHAS (móvil, tablet en vertical) ───
+   La simulación pasa arriba a todo el ancho, con proporción 4:3, y los
+   controles debajo. En ordenador no cambia nada. */
+@media (max-width: 960px) {
+    html, body { height: auto; overflow: auto; }
+    body { flex-direction: column; height: auto; }
+    #canvas-holder { order: -1; padding: 10px; overflow: visible; }
+    #sim-frame { flex: none; aspect-ratio: 4 / 3; }
+    .sidebar { width: 100%; overflow: visible; border-right: none; border-top: 1px solid var(--border-main); }
+    #atom-controls-row { height: auto; min-height: 170px; }
+}
+
+/* En móvil los tres átomos se apilan; los conectores de enlace quedan entre ellos. */
+@media (max-width: 600px) {
+    #atom-controls-row { flex-direction: column; min-height: 0; }
+    .atom-ctrl { flex: none; min-height: 150px; }
+    .bond-connector { width: 100%; flex-direction: row; gap: 6px; padding: 4px 0; }
+    .bond-connector::before, .bond-connector::after { display: none; }
 }
