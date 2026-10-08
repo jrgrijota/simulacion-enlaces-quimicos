@@ -1328,7 +1328,13 @@ function updateUIStateIonic() {
             let diffHtml = '';
             if (!stable) {
                 if (a.data.isMetal) {
-                    diffHtml = `<div class="check-fail">Debe ceder ${a.valenceCount()} e⁻</div>`;
+                    // Un metal se estabiliza cediendo justo sus electrones de valencia:
+                    // si ya ha cedido más (p. ej. Na²⁺), tiene que recuperar los que sobran.
+                    let nativeVal = a.data.config[a.data.config.length - 1];
+                    let toLose    = nativeVal - q;
+                    diffHtml = toLose > 0
+                        ? `<div class="check-fail">Debe ceder ${toLose} e⁻</div>`
+                        : `<div class="check-fail">Ha cedido de más: debe recuperar ${-toLose} e⁻</div>`;
                 } else {
                     let toGain = target - vCount;
                     diffHtml = toGain > 0
