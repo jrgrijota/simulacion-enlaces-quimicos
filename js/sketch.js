@@ -1376,7 +1376,7 @@ function updateUIStateCovalent() {
             let bonds    = covalentBonds.filter(b => b.atomA === i || b.atomB === i).length;
 
             let needHtml = stable ? '' :
-                `<div class="check-fail">Faltan ${need} e⁻ para ${ruleName.toLowerCase()}</div>`;
+                `<div class="check-fail">${need === 1 ? "Falta 1 e⁻" : `Faltan ${need} e⁻`} para ${ruleName.toLowerCase()}</div>`;
             let checkHtml = stable
                 ? `<div class="check-pass">✔ ${ruleName} alcanzado</div>`
                 : `<div class="check-fail">✖ ${ruleName} no alcanzado</div>`;
@@ -1633,7 +1633,7 @@ function updateModeInfoCard(mode) {
     if (mode === 'IONIC') {
         content.innerHTML = `
             <p>Un <em>metal</em> cede electrones a un <em>no metal</em> — ambos alcanzan el octeto y quedan con cargas opuestas. La atracción de <b>Coulomb</b> entre iones forma el enlace.</p>
-            <p>Elige átomos, pulsa <em>Ceder e⁻</em> y observa la transferencia. Prueba <b>NaCl</b>, <b>MgCl₂</b> o <b>Na₂O</b>.</p>`;
+            <p>Elige átomos, pulsa <em>Cede un electrón a …</em> y observa la transferencia. Prueba <b>NaCl</b>, <b>MgCl₂</b> o <b>Na₂O</b>.</p>`;
     } else if (mode === 'METALLIC') {
         content.innerHTML = `
             <p>Los metales ceden sus e⁻ de valencia a un <em>mar de electrones</em> deslocalizados que mantiene cohesionada la red de <b>cationes</b>.</p>
