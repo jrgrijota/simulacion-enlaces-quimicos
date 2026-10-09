@@ -1345,20 +1345,25 @@ function updateUIStateIonic() {
                     let nativeVal = a.data.config[a.data.config.length - 1];
                     let toLose    = nativeVal - q;
                     diffHtml = toLose > 0
-                        ? `<div class="check-fail">Debe ceder ${toLose} e⁻</div>`
+                        ? `<div class="check-todo">Le falta ceder ${toLose} e⁻</div>`
                         : `<div class="check-fail">Ha cedido de más: debe recuperar ${-toLose} e⁻</div>`;
                 } else {
                     let toGain = target - vCount;
                     diffHtml = toGain > 0
-                        ? `<div class="check-fail">Debe ganar ${toGain} e⁻</div>`
+                        ? `<div class="check-todo">Le falta ganar ${toGain} e⁻</div>`
                         : `<div class="check-fail">Exceso de ${Math.abs(toGain)} e⁻</div>`;
                 }
             }
 
             let ruleName  = target === 2 ? 'Dueto' : 'Octeto';
+            // Antes de empezar no hay ningún error: el átomo aún no tiene su capa
+            // externa completa. El rojo se reserva para cuando se ha pasado.
+            let pasado = diffHtml.includes('check-fail');
             let checkHtml = stable
                 ? `<div class="check-pass">✔ ${ruleName} alcanzado</div>`
-                : `<div class="check-fail">✖ Configuración inestable</div>`;
+                : pasado
+                    ? `<div class="check-fail">✖ Se ha pasado del ${ruleName.toLowerCase()}</div>`
+                    : `<div class="check-todo">Aún sin ${ruleName.toLowerCase()}</div>`;
 
             box.html(`
                 <div>Carga: <b style="color:${qColor}">${qStr}</b></div>

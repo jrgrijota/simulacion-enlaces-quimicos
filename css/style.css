@@ -245,7 +245,8 @@ button:disabled { opacity: 0.28; cursor: not-allowed; }
 
 /* ─── CHECKS ──────────────────────────────────── */
 .check-pass { color: var(--success); font-weight: 600; }
-.check-fail { color: var(--danger); }
+.check-fail { color: var(--danger); font-weight: 600; }
+.check-todo { color: var(--text-muted); }
 
 
 /* ─── MODE CARD (selector always visible) ────── */
