@@ -1541,20 +1541,27 @@ function drawBondEffect() {
         let bx = width / 2, by = constrain(height * 0.82, height * 0.72, height - 38);
         noStroke();
         fill(16, 185, 129, a3 * 0.18);
-        rect(bx - 180, by - 20, 360, 40, 10);
+        rect(bx - 210, by - 24, 420, 56, 10);
         fill(16, 185, 129, a3);
         textAlign(CENTER, CENTER);
         textSize(17);
         textStyle(BOLD);
         let msg = currentMode === 'COVALENT' ? '¡Enlace covalente formado!' : '¡Enlace iónico formado!';
-        text(msg, bx, by);
+        text(msg, bx, by - 6);
         textStyle(NORMAL);
+        // Matiz que evita la idea errónea más probable en cada caso
+        let nota = currentMode === 'COVALENT'
+            ? 'Los átomos se dibujan en línea: la forma real de la molécula puede ser otra'
+            : 'No es una molécula: cada ion atrae a todos sus vecinos y forman una red';
+        fill(200, 240, 225, a3);
+        textSize(11.5);
+        text(nota, bx, by + 15);
 
         // Botón "Ver red cristalina" — dibujado en canvas, solo en modo iónico
         if (currentMode === 'IONIC' && bondProgress >= 0.98) {
             const bW = 214, bH = 38;
             const bBx = bx - bW / 2;
-            const bBy = constrain(by + 30, by + 30, height - bH - 10);
+            const bBy = constrain(by + 40, by + 40, height - bH - 10);
             const hover = mouseX >= bBx && mouseX <= bBx + bW &&
                           mouseY >= bBy && mouseY <= bBy + bH;
             noStroke();
