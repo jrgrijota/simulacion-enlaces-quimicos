@@ -69,13 +69,13 @@ function buildCovalentCrystalUI() {
 
     // Selector de cristal
     let sCard = createDiv().class('card');
-    sCard.child(createDiv('Cristal').class('atom-card-label'));
+    sCard.child(createDiv(i18n.t('Cristal')).class('atom-card-label'));
     let sBody = createDiv().class('card-body-static');
     let grid = createDiv();
     grid.style('display', 'grid').style('grid-template-columns', '1fr 1fr').style('gap', '6px');
     for (const [id, lbl] of [['diamond', '💎 Diamante'], ['graphite', '✏️ Grafito'],
                              ['silica', '◆ Sílice'], ['dryice', '🧊 Hielo seco']]) {
-        let b = createButton(lbl);
+        let b = createButton(i18n.t(lbl));
         if (id === covCrystalId) b.class('btn-primary');
         b.style('font-size', '11.5px');
         b.mousePressed(() => { if (id !== covCrystalId) selectCovalentCrystal(id); });
@@ -87,23 +87,23 @@ function buildCovalentCrystalUI() {
 
     // Información (nivel ESO)
     const typeText = {
-        network:   ['Cristal covalente', 'red de átomos unidos por enlaces covalentes'],
-        layered:   ['Cristal covalente laminar', 'láminas de átomos unidos por enlaces covalentes'],
-        molecular: ['Cristal molecular', 'moléculas covalentes unidas por fuerzas débiles'],
+        network:   [i18n.t('Cristal covalente'), i18n.t('red de átomos unidos por enlaces covalentes')],
+        layered:   [i18n.t('Cristal covalente laminar'), i18n.t('láminas de átomos unidos por enlaces covalentes')],
+        molecular: [i18n.t('Cristal molecular'), i18n.t('moléculas covalentes unidas por fuerzas débiles')],
     }[d.kind];
     let iCard = createDiv().class('card');
-    iCard.child(createDiv('Estructura').class('atom-card-label'));
+    iCard.child(createDiv(i18n.t('Estructura')).class('atom-card-label'));
     let iBody = createDiv().class('card-body-static');
     iBody.html(`
         <div class="compound-formula">${d.formula}</div>
-        <div class="result-detail">${d.name}</div>
+        <div class="result-detail">${i18n.t(d.name)}</div>
         <div class="result-detail" style="margin-bottom:8px"><b>${typeText[0]}</b>: ${typeText[1]}</div>
         <div class="info-section">
-            <p><em>Enlaces:</em> ${d.cn}</p>
-            <p>${d.bondText}</p>
-            <p><em>Propiedades:</em></p>
-            <ul class="crystal-props">${d.props.map(p => `<li>${p}</li>`).join('')}</ul>
-            ${d.note ? `<p class="crystal-note">ⓘ ${d.note}</p>` : ''}
+            <p><em>${i18n.t('Enlaces:')}</em> ${i18n.t(d.cn)}</p>
+            <p>${i18n.t(d.bondText)}</p>
+            <p><em>${i18n.t('Propiedades:')}</em></p>
+            <ul class="crystal-props">${d.props.map(p => `<li>${i18n.t(p)}</li>`).join('')}</ul>
+            ${d.note ? `<p class="crystal-note">ⓘ ${i18n.t(d.note)}</p>` : ''}
         </div>
     `);
     iCard.child(iBody);
@@ -114,7 +114,7 @@ function buildCovalentCrystalUI() {
     // Visualización
     let fCard = createDiv().class('card');
     let fBody = createDiv().class('card-body-static');
-    fCard.child(createDiv('Visualización').class('atom-card-label'));
+    fCard.child(createDiv(i18n.t('Visualización')).class('atom-card-label'));
     fCard.child(fBody);
     createAutoRotateCheckbox(fBody);
     uiContainer.child(fCard);
@@ -249,10 +249,10 @@ function updateTempLabel() {
 function buildCovalentExperimentsCard() {
     const d = COVALENT_CRYSTALS[covCrystalId];
     let card = createDiv().class('card');
-    card.child(createDiv('Experimentos').class('atom-card-label'));
+    card.child(createDiv(i18n.t('Experimentos')).class('atom-card-label'));
     let body = createDiv().class('card-body-static');
 
-    elBtnCovVoltage = createButton(covVoltage ? '■ Quitar voltaje' : '⚡ Aplicar voltaje');
+    elBtnCovVoltage = createButton(covVoltage ? i18n.t('■ Quitar voltaje') : i18n.t('⚡ Aplicar voltaje'));
     elBtnCovVoltage.class('btn-primary');
     elBtnCovVoltage.style('width', '100%').style('margin-bottom', '8px');
     elBtnCovVoltage.mousePressed(() => setCovalentVoltage(!covVoltage));
@@ -261,7 +261,7 @@ function buildCovalentExperimentsCard() {
     let row = createDiv();
     row.style('display', 'flex').style('justify-content', 'space-between')
        .style('align-items', 'center').style('margin-bottom', '4px');
-    let lbl = createDiv('🌡 Temperatura');
+    let lbl = createDiv(i18n.t('🌡 Temperatura'));
     lbl.style('font-size', '11px').style('color', 'var(--text-muted)');
     elTempLabel = createDiv('');
     elTempLabel.style('font-size', '11px').style('font-weight', '600')
@@ -287,16 +287,16 @@ function buildCovalentExperimentsCard() {
     let scale = createDiv();
     scale.style('position', 'relative').style('height', '14px').style('font-size', '9.5px');
     const pct = covTToSlider(d.transition.T) / 10;
-    let tick = createDiv(`▲ ${d.transition.verb} ${fmtT(d.transition.T)}`);
+    let tick = createDiv(i18n.t('▲ {verbo} {T}', { verbo: i18n.t(d.transition.verb), T: fmtT(d.transition.T) }));
     const right = pct > 60;
     tick.style('position', 'absolute').style('white-space', 'nowrap').style('color', '#F59E0B');
     if (right) tick.style('right', `calc(${100 - pct}% - 6px)`).style('text-align', 'right');
     else       tick.style('left', `calc(${pct}% - 6px)`);
-    if (right) tick.html(`${d.transition.verb} ${fmtT(d.transition.T)} ▲`);
+    if (right) tick.html(i18n.t('{verbo} {T} ▲', { verbo: i18n.t(d.transition.verb), T: fmtT(d.transition.T) }));
     scale.child(tick);
     body.child(scale);
 
-    let reset = createButton(`↺ Volver a ${fmtT(covInitialTemp(d))}`);
+    let reset = createButton(i18n.t('↺ Volver a {T}', { T: fmtT(covInitialTemp(d)) }));
     reset.style('width', '100%').style('margin-top', '6px').style('font-size', '11px');
     reset.mousePressed(() => setCovalentTemp(covInitialTemp(d)));
     body.child(reset);
@@ -310,7 +310,7 @@ function buildCovalentExperimentsCard() {
 function drawCovalentThermalHud() {
     const d = COVALENT_CRYSTALS[covCrystalId];
     const phase = covPhase();
-    const names = { solid: 'Sólido', liquid: 'Líquido', gas: 'Gas' };
+    const names = { solid: i18n.t('Sólido'), liquid: i18n.t('Líquido'), gas: i18n.t('Gas') };
 
     // Fondo para que las partículas que pasan no tapen el termómetro
     noStroke();
@@ -328,15 +328,15 @@ function drawCovalentThermalHud() {
     const molecular = d.kind === 'molecular';
     let msg;
     if (phase === 'solid') {
-        msg = ['#F59E0B', molecular ? 'Las moléculas vibran más cuanto mayor es la temperatura'
-                                    : 'Los átomos vibran más cuanto mayor es la temperatura',
-               `${d.transition.verb === 'funde' ? 'Funde' : 'Sublima'} a ${fmtT(d.transition.T)}`];
+        msg = ['#F59E0B', molecular ? i18n.t('Las moléculas vibran más cuanto mayor es la temperatura')
+                                    : i18n.t('Los átomos vibran más cuanto mayor es la temperatura'),
+               i18n.t(d.transition.verb === 'funde' ? 'Funde a {T}' : 'Sublima a {T}', { T: fmtT(d.transition.T) })];
     } else if (molecular) {
-        msg = ['#EF4444', `¡Sublima a ${fmtT(d.transition.T)}! Las moléculas se separan enteras`,
-               'No se rompe ningún enlace covalente: solo las fuerzas débiles entre moléculas'];
+        msg = ['#EF4444', i18n.t('¡Sublima a {T}! Las moléculas se separan enteras', { T: fmtT(d.transition.T) }),
+               i18n.t('No se rompe ningún enlace covalente: solo las fuerzas débiles entre moléculas')];
     } else {
-        msg = ['#EF4444', `¡${d.transition.verb === 'funde' ? 'Funde' : 'Sublima'} a ${fmtT(d.transition.T)}! Se rompen enlaces covalentes`,
-               'Por eso los cristales covalentes tienen temperaturas de fusión altísimas'];
+        msg = ['#EF4444', i18n.t(d.transition.verb === 'funde' ? '¡Funde a {T}! Se rompen enlaces covalentes' : '¡Sublima a {T}! Se rompen enlaces covalentes', { T: fmtT(d.transition.T) }),
+               i18n.t('Por eso los cristales covalentes tienen temperaturas de fusión altísimas')];
     }
     const y1 = height - 66 - 34, y2 = height - 66 - 16;
     textAlign(CENTER, CENTER);
@@ -403,7 +403,7 @@ function setCovalentVoltage(on) {
         _covBuildAdj();
         for (let k = 0; k < COV_E_COUNT; k++) covElectrons.push(_covSpawnElectron());
     }
-    if (elBtnCovVoltage) elBtnCovVoltage.html(on ? '■ Quitar voltaje' : '⚡ Aplicar voltaje');
+    if (elBtnCovVoltage) elBtnCovVoltage.html(on ? i18n.t('■ Quitar voltaje') : i18n.t('⚡ Aplicar voltaje'));
     if (!isLooping()) redraw();
 }
 
@@ -452,12 +452,12 @@ function drawCovalentVoltage() {
     }
 
     const msg = d.conducts
-        ? ['#FACC15', 'Conduce: los electrones se mueven a lo largo de las láminas',
-           'Cada C usa 3 electrones en enlaces; el 4.º queda libre y se desplaza hacia el polo +']
-        : ['#EF4444', 'No conduce la electricidad',
+        ? ['#FACC15', i18n.t('Conduce: los electrones se mueven a lo largo de las láminas'),
+           i18n.t('Cada C usa 3 electrones en enlaces; el 4.º queda libre y se desplaza hacia el polo +')]
+        : ['#EF4444', i18n.t('No conduce la electricidad'),
            d.kind === 'molecular'
-               ? 'Las moléculas son neutras y sus electrones están en los enlaces: no hay cargas libres'
-               : 'Todos los electrones de valencia están fijos en los enlaces covalentes: no hay cargas libres'];
+               ? i18n.t('Las moléculas son neutras y sus electrones están en los enlaces: no hay cargas libres')
+               : i18n.t('Todos los electrones de valencia están fijos en los enlaces covalentes: no hay cargas libres')];
     // Encima del mensaje de temperatura (si lo hay)
     const busy = covTemp !== covInitialTemp(d);
     const y1 = height - 66 - (busy ? 74 : 34), y2 = y1 + 18;

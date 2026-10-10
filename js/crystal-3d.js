@@ -244,8 +244,8 @@ function _drawCrystal3DHud(hasSel) {
     fill(100, 116, 139);
     textAlign(CENTER, TOP);
     textSize(11);
-    text(hasSel ? 'Haz clic en el fondo para quitar el resaltado'
-                : `Arrastra para girar · Haz clic en un ${sc.unit || 'átomo'} para ver sus vecinos`,
+    text(hasSel ? i18n.t('Haz clic en el fondo para quitar el resaltado')
+                : i18n.t('Arrastra para girar · Haz clic en un {unidad} para ver sus vecinos', { unidad: i18n.t(sc.unit || 'átomo') }),
          width / 2, 14);
 
     let y = 18;
@@ -261,7 +261,7 @@ function _drawCrystal3DHud(hasSel) {
         const nameW = textWidth(name);
         textStyle(NORMAL);
         fill(100, 116, 139);
-        text(sp.label, 36 + nameW + 8, y + 8);
+        text(i18n.t(sp.label), 36 + nameW + 8, y + 8);
         y += 20;
     }
 }
@@ -358,7 +358,7 @@ function createAutoRotateCheckbox(parent) {
     elChkAutoRotate.style('width', '14px').style('height', '14px').style('cursor', 'pointer')
                    .style('accent-color', 'var(--accent)');
     elChkAutoRotate.elt.checked = crystal3DAutoRotate;
-    let lbl = createElement('label', 'Giro automático');
+    let lbl = createElement('label', i18n.t('Giro automático'));
     lbl.attribute('for', 'chk-autorotate');
     lbl.style('font-size', '11.5px').style('color', 'var(--text-label)')
        .style('cursor', 'pointer').style('user-select', 'none');
