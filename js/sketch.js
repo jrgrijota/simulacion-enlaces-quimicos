@@ -259,10 +259,10 @@ function togglePause() {
     let btn = document.getElementById('pause-btn');
     if (isLooping()) {
         noLoop();
-        if (btn) { btn.textContent = '▶ Reanudar'; btn.classList.add('btn-primary'); }
+        if (btn) { btn.textContent = i18n.t('▶ Reanudar'); btn.classList.add('btn-primary'); }
     } else {
         loop();
-        if (btn) { btn.textContent = '⏸ Pausar'; btn.classList.remove('btn-primary'); }
+        if (btn) { btn.textContent = i18n.t('⏸ Pausar'); btn.classList.remove('btn-primary'); }
     }
 }
 
@@ -282,7 +282,7 @@ function initSimulation() {
     if (!isLooping()) {
         loop();
         let btn = document.getElementById('pause-btn');
-        if (btn) { btn.textContent = '⏸ Pausar'; btn.classList.remove('btn-primary'); }
+        if (btn) { btn.textContent = i18n.t('⏸ Pausar'); btn.classList.remove('btn-primary'); }
     }
 
     uiContainer.html('');
@@ -415,7 +415,7 @@ function buildIonicUI() {
 
     // ── Sidebar: botón de reinicio ──
     let resetRow = createDiv().class('reset-row');
-    let resetBtn = createButton('↺ Reiniciar simulación');
+    let resetBtn = createButton(i18n.t('↺ Reiniciar simulación'));
     resetBtn.mousePressed(resetSimulation);
     resetRow.child(resetBtn);
     uiContainer.child(resetRow);
@@ -423,7 +423,7 @@ function buildIonicUI() {
     // ── Sidebar: card de resultado ──
     elResultCard = createDiv().class('card');
     elResultCard.style('display', 'none');
-    elResultCard.child(createDiv('✔ Enlace formado').class('result-header'));
+    elResultCard.child(createDiv(i18n.t('✔ Enlace formado')).class('result-header'));
     elResultBody = createDiv().class('card-body-static');
     elResultCard.child(elResultBody);
     uiContainer.child(elResultCard);
@@ -431,19 +431,19 @@ function buildIonicUI() {
     // El botón "Ver red cristalina" se dibuja en el canvas (ver drawBondEffect)
 
     // ── Columnas de control bajo el canvas ──
-    const labels = ['Átomo A', 'Átomo B', 'Átomo C'];
+    const labels = [i18n.t('Átomo A'), i18n.t('Átomo B'), i18n.t('Átomo C')];
     for (let i = 0; i < 3; i++) {
         let ctrl = select(`#ctrl-${i}`);
 
         ctrl.child(createDiv(labels[i]).class('atom-ctrl-label'));
 
         let sel = createSelect();
-        sel.option('— Vacío —', 'NONE');
+        sel.option(i18n.t('— Vacío —'), 'NONE');
         for (let sym in ELEMENTS) {
             if (sym === 'NONE') continue;
             let el        = ELEMENTS[sym];
-            let typeLabel = el.isMetal ? 'Metal' : 'No metal';
-            sel.option(`${sym} - ${el.name} (${typeLabel})`, sym);
+            let typeLabel = el.isMetal ? i18n.t('Metal') : i18n.t('No metal');
+            sel.option(`${sym} - ${i18n.t(el.name)} (${typeLabel})`, sym);
         }
         sel.value(atoms[i].symbol);
         atomSelects[i] = sel;
@@ -464,18 +464,18 @@ function buildIonicUI() {
 
         let btnBox = createDiv().class('btn-group');
         if (i === 0) {
-            let b = createButton('Cede un electrón a B').id('btn-0r');
+            let b = createButton(i18n.t('Cede un electrón a B')).id('btn-0r');
             b.mousePressed(() => transferElectron(0, 1));
             btnBox.child(b);
         } else if (i === 1) {
-            let bL = createButton('Cede un electrón a A').id('btn-1l');
+            let bL = createButton(i18n.t('Cede un electrón a A')).id('btn-1l');
             bL.mousePressed(() => transferElectron(1, 0));
-            let bR = createButton('Cede un electrón a C').id('btn-1r');
+            let bR = createButton(i18n.t('Cede un electrón a C')).id('btn-1r');
             bR.mousePressed(() => transferElectron(1, 2));
             btnBox.child(bL);
             btnBox.child(bR);
         } else {
-            let b = createButton('Cede un electrón a B').id('btn-2l');
+            let b = createButton(i18n.t('Cede un electrón a B')).id('btn-2l');
             b.mousePressed(() => transferElectron(2, 1));
             btnBox.child(b);
         }
@@ -495,7 +495,7 @@ function buildCovalentUI() {
 
     // Sidebar: reset
     let resetRow = createDiv().class('reset-row');
-    let resetBtn = createButton('↺ Reiniciar simulación');
+    let resetBtn = createButton(i18n.t('↺ Reiniciar simulación'));
     resetBtn.mousePressed(resetCovalentSimulation);
     resetRow.child(resetBtn);
     uiContainer.child(resetRow);
@@ -503,21 +503,21 @@ function buildCovalentUI() {
     // Sidebar: result card
     elResultCard = createDiv().class('card');
     elResultCard.style('display', 'none');
-    elResultCard.child(createDiv('✔ Enlace formado').class('result-header'));
+    elResultCard.child(createDiv(i18n.t('✔ Enlace formado')).class('result-header'));
     elResultBody = createDiv().class('card-body-static');
     elResultCard.child(elResultBody);
     uiContainer.child(elResultCard);
 
     // Sidebar: acceso a los cristales covalentes (js/covalent-crystal-mode.js)
     let cCard = createDiv().class('card');
-    cCard.child(createDiv('Sólidos covalentes').class('atom-card-label'));
+    cCard.child(createDiv(i18n.t('Sólidos covalentes')).class('atom-card-label'));
     let cBody = createDiv().class('card-body-static');
-    let cBtn = createButton('🔷 Ver cristales covalentes');
+    let cBtn = createButton(i18n.t('🔷 Ver cristales covalentes'));
     cBtn.class('btn-primary');
     cBtn.style('width', '100%');
     cBtn.mousePressed(enterCovalentCrystal);
     cBody.child(cBtn);
-    let cHint = createDiv('Diamante, grafito, sílice y hielo seco');
+    let cHint = createDiv(i18n.t('Diamante, grafito, sílice y hielo seco'));
     cHint.style('font-size', '10.5px').style('color', 'var(--text-muted)')
          .style('text-align', 'center').style('margin-top', '5px');
     cBody.child(cHint);
@@ -525,17 +525,17 @@ function buildCovalentUI() {
     uiContainer.child(cCard);
 
     // Columnas de control bajo el canvas
-    const labels = ['Átomo A', 'Átomo B', 'Átomo C'];
+    const labels = [i18n.t('Átomo A'), i18n.t('Átomo B'), i18n.t('Átomo C')];
     for (let i = 0; i < 3; i++) {
         let ctrl = select(`#ctrl-${i}`);
         ctrl.child(createDiv(labels[i]).class('atom-ctrl-label'));
 
         let sel = createSelect();
-        sel.option('— Vacío —', 'NONE');
+        sel.option(i18n.t('— Vacío —'), 'NONE');
         for (let sym in ELEMENTS) {
             if (sym === 'NONE') continue;
             if (ELEMENTS[sym].isMetal) continue;
-            sel.option(`${sym} - ${ELEMENTS[sym].name}`, sym);
+            sel.option(`${sym} - ${i18n.t(ELEMENTS[sym].name)}`, sym);
         }
         sel.value(atoms[i].symbol);
         atomSelects[i] = sel;
@@ -559,19 +559,19 @@ function buildCovalentUI() {
     let conn01 = select('#bond-01');
     conn01.html('');
     let btn01 = createButton('');
-    btn01.elt.innerHTML = '<span style="font-size:13px">⇄</span><br>Compartir';
+    btn01.elt.innerHTML = '<span style="font-size:13px">⇄</span><br>' + i18n.t('Compartir');
     btn01.id('btn-cov-01');
     btn01.class('bond-connector-btn');
     btn01.mousePressed(() => shareElectron(0, 1));
     conn01.child(btn01);
     let dat01 = createButton('');
-    dat01.elt.innerHTML = '<span style="font-size:13px">→</span><br>Dativo';
+    dat01.elt.innerHTML = '<span style="font-size:13px">→</span><br>' + i18n.t('Dativo');
     dat01.id('btn-dat-01');
     dat01.class('bond-connector-btn bond-dative-btn');
     dat01.mousePressed(() => shareElectronDative(0, 1));
     conn01.child(dat01);
     let rec01 = createButton('');
-    rec01.elt.innerHTML = '<span style="font-size:11px">↩</span><br>Recuperar';
+    rec01.elt.innerHTML = '<span style="font-size:11px">↩</span><br>' + i18n.t('Recuperar');
     rec01.id('btn-rec-01');
     rec01.class('bond-connector-btn bond-recover-btn');
     rec01.mousePressed(() => unshareElectron(0, 1));
@@ -580,19 +580,19 @@ function buildCovalentUI() {
     let conn12 = select('#bond-12');
     conn12.html('');
     let btn12 = createButton('');
-    btn12.elt.innerHTML = '<span style="font-size:13px">⇄</span><br>Compartir';
+    btn12.elt.innerHTML = '<span style="font-size:13px">⇄</span><br>' + i18n.t('Compartir');
     btn12.id('btn-cov-12');
     btn12.class('bond-connector-btn');
     btn12.mousePressed(() => shareElectron(1, 2));
     conn12.child(btn12);
     let dat12 = createButton('');
-    dat12.elt.innerHTML = '<span style="font-size:13px">→</span><br>Dativo';
+    dat12.elt.innerHTML = '<span style="font-size:13px">→</span><br>' + i18n.t('Dativo');
     dat12.id('btn-dat-12');
     dat12.class('bond-connector-btn bond-dative-btn');
     dat12.mousePressed(() => shareElectronDative(1, 2));
     conn12.child(dat12);
     let rec12 = createButton('');
-    rec12.elt.innerHTML = '<span style="font-size:11px">↩</span><br>Recuperar';
+    rec12.elt.innerHTML = '<span style="font-size:11px">↩</span><br>' + i18n.t('Recuperar');
     rec12.id('btn-rec-12');
     rec12.class('bond-connector-btn bond-recover-btn');
     rec12.mousePressed(() => unshareElectron(1, 2));
@@ -815,7 +815,7 @@ function checkCovalentBondFormed() {
         elResultCard.style('display', 'block');
         elResultBody.html(`
             <div class="compound-formula">${getCompoundName()}</div>
-            <div class="result-detail">Enlace covalente · Par de electrones compartido</div>
+            <div class="result-detail">${i18n.t('Enlace covalente · Par de electrones compartido')}</div>
         `);
     }
 }
@@ -1297,7 +1297,7 @@ function checkBondFormed() {
         elResultCard.style('display', 'block');
         elResultBody.html(`
             <div class="compound-formula">${getCompoundName()}</div>
-            <div class="result-detail">Enlace iónico · Atracción de Coulomb</div>
+            <div class="result-detail">${i18n.t('Enlace iónico · Atracción de Coulomb')}</div>
             <div class="result-ions">${ionParts.join(' &nbsp;+&nbsp; ')}</div>
         `);
         // El botón se dibuja en el canvas; _crystalBtnBounds se actualiza en drawBondEffect
@@ -1328,7 +1328,7 @@ function updateUIStateIonic() {
         if (!box) continue;
 
         if (a.symbol === 'NONE') {
-            box.html('<div class="ui-empty">— ranura vacía —</div>');
+            box.html(`<div class="ui-empty">${i18n.t('— ranura vacía —')}</div>`);
         } else {
             let q      = a.netCharge;
             let qStr   = chargeStr(q);
@@ -1345,29 +1345,29 @@ function updateUIStateIonic() {
                     let nativeVal = a.data.config[a.data.config.length - 1];
                     let toLose    = nativeVal - q;
                     diffHtml = toLose > 0
-                        ? `<div class="check-todo">Le falta ceder ${toLose} e⁻</div>`
-                        : `<div class="check-fail">Ha cedido de más: debe recuperar ${-toLose} e⁻</div>`;
+                        ? `<div class="check-todo">${i18n.t('Le falta ceder {n} e⁻', { n: toLose })}</div>`
+                        : `<div class="check-fail">${i18n.t('Ha cedido de más: debe recuperar {n} e⁻', { n: -toLose })}</div>`;
                 } else {
                     let toGain = target - vCount;
                     diffHtml = toGain > 0
-                        ? `<div class="check-todo">Le falta ganar ${toGain} e⁻</div>`
-                        : `<div class="check-fail">Exceso de ${Math.abs(toGain)} e⁻</div>`;
+                        ? `<div class="check-todo">${i18n.t('Le falta ganar {n} e⁻', { n: toGain })}</div>`
+                        : `<div class="check-fail">${i18n.t('Exceso de {n} e⁻', { n: Math.abs(toGain) })}</div>`;
                 }
             }
 
-            let ruleName  = target === 2 ? 'Dueto' : 'Octeto';
+            let ruleName  = i18n.t(target === 2 ? 'Dueto' : 'Octeto');
             // Antes de empezar no hay ningún error: el átomo aún no tiene su capa
             // externa completa. El rojo se reserva para cuando se ha pasado.
             let pasado = diffHtml.includes('check-fail');
             let checkHtml = stable
-                ? `<div class="check-pass">✔ ${ruleName} alcanzado</div>`
+                ? `<div class="check-pass">${i18n.t('✔ {regla} alcanzado', { regla: ruleName })}</div>`
                 : pasado
-                    ? `<div class="check-fail">✖ Se ha pasado del ${ruleName.toLowerCase()}</div>`
-                    : `<div class="check-todo">Aún sin ${ruleName.toLowerCase()}</div>`;
+                    ? `<div class="check-fail">${i18n.t('✖ Se ha pasado del {regla}', { regla: ruleName.toLowerCase() })}</div>`
+                    : `<div class="check-todo">${i18n.t('Aún sin {regla}', { regla: ruleName.toLowerCase() })}</div>`;
 
             box.html(`
-                <div>Carga: <b style="color:${qColor}">${qStr}</b></div>
-                <div>e⁻ valencia: ${vCount} / ${target}</div>
+                <div>${i18n.t('Carga:')} <b style="color:${qColor}">${qStr}</b></div>
+                <div>${i18n.t('e⁻ valencia:')} ${vCount} / ${target}</div>
                 ${diffHtml}
                 <div style="margin-top:3px">${checkHtml}</div>
             `);
@@ -1383,25 +1383,25 @@ function updateUIStateCovalent() {
         if (!box) continue;
 
         if (a.symbol === 'NONE') {
-            box.html('<div class="ui-empty">— ranura vacía —</div>');
+            box.html(`<div class="ui-empty">${i18n.t('— ranura vacía —')}</div>`);
         } else {
             let eEff     = a.effectiveValenceCount();
             let target   = a.data.nobleTarget;
             let stable   = a.isStableCovalent();
-            let ruleName = target === 2 ? 'Dueto' : 'Octeto';
+            let ruleName = i18n.t(target === 2 ? 'Dueto' : 'Octeto');
             let need     = target - eEff;
             let bonds    = covalentBonds.filter(b => b.atomA === i || b.atomB === i).length;
 
             let needHtml = stable ? '' :
-                `<div class="check-fail">${need === 1 ? "Falta 1 e⁻" : `Faltan ${need} e⁻`} para ${ruleName.toLowerCase()}</div>`;
+                `<div class="check-fail">${need === 1 ? i18n.t('Falta 1 e⁻ para {regla}', { regla: ruleName.toLowerCase() }) : i18n.t('Faltan {n} e⁻ para {regla}', { n: need, regla: ruleName.toLowerCase() })}</div>`;
             let checkHtml = stable
-                ? `<div class="check-pass">✔ ${ruleName} alcanzado</div>`
-                : `<div class="check-fail">✖ ${ruleName} no alcanzado</div>`;
+                ? `<div class="check-pass">${i18n.t('✔ {regla} alcanzado', { regla: ruleName })}</div>`
+                : `<div class="check-fail">${i18n.t('✖ {regla} no alcanzado', { regla: ruleName })}</div>`;
             let bondsHtml = bonds > 0
-                ? `<div>Enlaces formados: <b>${bonds}</b></div>` : '';
+                ? `<div>${i18n.t('Enlaces formados:')} <b>${bonds}</b></div>` : '';
 
             box.html(`
-                <div>e⁻ efectivos: <b>${eEff} / ${target}</b></div>
+                <div>${i18n.t('e⁻ efectivos:')} <b>${eEff} / ${target}</b></div>
                 ${bondsHtml}
                 ${needHtml}
                 <div style="margin-top:3px">${checkHtml}</div>
@@ -1481,7 +1481,7 @@ function drawForces() {
             fill('#FBBF24');
             textAlign(CENTER, BOTTOM);
             textSize(11);
-            text('⚡ Atracción electrostática', midX, lineY - 4);
+            text(i18n.t('⚡ Atracción electrostática'), midX, lineY - 4);
             fill('#10B981');
             textSize(15);
             textAlign(CENTER, TOP);
@@ -1491,7 +1491,7 @@ function drawForces() {
             fill('#64748B');
             textAlign(CENTER, BOTTOM);
             textSize(11);
-            text('Sin atracción electrostática', midX, lineY - 4);
+            text(i18n.t('Sin atracción electrostática'), midX, lineY - 4);
             fill('#EF4444');
             textSize(15);
             textAlign(CENTER, TOP);
@@ -1546,13 +1546,13 @@ function drawBondEffect() {
         textAlign(CENTER, CENTER);
         textSize(17);
         textStyle(BOLD);
-        let msg = currentMode === 'COVALENT' ? '¡Enlace covalente formado!' : '¡Enlace iónico formado!';
+        let msg = currentMode === 'COVALENT' ? i18n.t('¡Enlace covalente formado!') : i18n.t('¡Enlace iónico formado!');
         text(msg, bx, by - 6);
         textStyle(NORMAL);
         // Matiz que evita la idea errónea más probable en cada caso
         let nota = currentMode === 'COVALENT'
-            ? 'Los átomos se dibujan en línea: la forma real de la molécula puede ser otra'
-            : 'No es una molécula: cada ion atrae a todos sus vecinos y forman una red';
+            ? i18n.t('Los átomos se dibujan en línea: la forma real de la molécula puede ser otra')
+            : i18n.t('No es una molécula: cada ion atrae a todos sus vecinos y forman una red');
         fill(200, 240, 225, a3);
         textSize(11.5);
         text(nota, bx, by + 15);
@@ -1576,7 +1576,7 @@ function drawBondEffect() {
             fill(hover ? 236 : 16, hover ? 253 : 185, hover ? 245 : 129);
             textSize(12);
             textStyle(BOLD);
-            text('Ver red cristalina →', bx, bBy + bH / 2);
+            text(i18n.t('Ver red cristalina →'), bx, bBy + bH / 2);
             textStyle(NORMAL);
             _crystalBtnBounds = { x: bBx, y: bBy, w: bW, h: bH };
         } else {
@@ -1637,10 +1637,10 @@ function drawComingSoon() {
     fill('#64748B');
     textAlign(CENTER, CENTER);
     textSize(13);
-    text('Esta modalidad está en desarrollo', width / 2, height / 2 - 13);
+    text(i18n.t('Esta modalidad está en desarrollo'), width / 2, height / 2 - 13);
     fill('#475569');
     textSize(11);
-    text('Selecciona Enlace Iónico para comenzar', width / 2, height / 2 + 13);
+    text(i18n.t('Selecciona Enlace Iónico para comenzar'), width / 2, height / 2 + 13);
 }
 
 // ============================================================
@@ -1655,20 +1655,23 @@ function updateModeInfoCard(mode) {
     if (!content) return;
 
     if (mode === 'IONIC') {
-        content.innerHTML = `
-            <p>Un <em>metal</em> cede electrones a un <em>no metal</em> — ambos alcanzan el octeto y quedan con cargas opuestas. La atracción de <b>Coulomb</b> entre iones forma el enlace.</p>
-            <p>Elige átomos, pulsa <em>Cede un electrón a …</em> y observa la transferencia. Prueba <b>NaCl</b>, <b>MgCl₂</b> o <b>Na₂O</b>.</p>`;
+        content.innerHTML = [
+            i18n.t('Un <em>metal</em> cede electrones a un <em>no metal</em> — ambos alcanzan el octeto y quedan con cargas opuestas. La atracción de <b>Coulomb</b> entre iones forma el enlace.'),
+            i18n.t('Elige átomos, pulsa <em>Cede un electrón a …</em> y observa la transferencia. Prueba <b>NaCl</b>, <b>MgCl₂</b> o <b>Na₂O</b>.')
+        ].map(p => `<p>${p}</p>`).join('');
     } else if (mode === 'METALLIC') {
-        content.innerHTML = `
-            <p>Los metales ceden sus e⁻ de valencia a un <em>mar de electrones</em> deslocalizados que mantiene cohesionada la red de <b>cationes</b>.</p>
-            <p>Usa <em>Aplicar voltaje</em> para ver la <b>conductividad</b> y <em>Deformar red</em> para la <b>maleabilidad</b>.</p>`;
+        content.innerHTML = [
+            i18n.t('Los metales ceden sus e⁻ de valencia a un <em>mar de electrones</em> deslocalizados que mantiene cohesionada la red de <b>cationes</b>.'),
+            i18n.t('Usa <em>Aplicar voltaje</em> para ver la <b>conductividad</b> y <em>Deformar red</em> para la <b>maleabilidad</b>.')
+        ].map(p => `<p>${p}</p>`).join('');
     } else if (mode === 'COVALENT') {
-        content.innerHTML = `
-            <p>Dos <em>no metales</em> comparten electrones de valencia. El par compartido orbita entre ambos núcleos y cuenta para el octeto de los dos átomos.</p>
-            <p>Pulsa <em>Compartir</em> en cada ranura. Prueba <b>H₂</b>, <b>Cl₂</b>, <b>HCl</b> o <b>H₂O</b> (A=H, B=O, C=H).</p>
-            <p>En el <em>enlace dativo</em> (→) el par lo aporta <b>un solo átomo</b> (el dador, desde un par solitario) y el otro pone un orbital vacío. Monta el <b>SO₂</b> (A=O, B=S, C=O): doble enlace <em>Compartir</em> en O=S y <em>Dativo</em> en S→O.</p>`;
+        content.innerHTML = [
+            i18n.t('Dos <em>no metales</em> comparten electrones de valencia. El par compartido orbita entre ambos núcleos y cuenta para el octeto de los dos átomos.'),
+            i18n.t('Pulsa <em>Compartir</em> en cada ranura. Prueba <b>H₂</b>, <b>Cl₂</b>, <b>HCl</b> o <b>H₂O</b> (A=H, B=O, C=H).'),
+            i18n.t('En el <em>enlace dativo</em> (→) el par lo aporta <b>un solo átomo</b> (el dador, desde un par solitario) y el otro pone un orbital vacío. Monta el <b>SO₂</b> (A=O, B=S, C=O): doble enlace <em>Compartir</em> en O=S y <em>Dativo</em> en S→O.')
+        ].map(p => `<p>${p}</p>`).join('');
     } else {
-        content.innerHTML = `<p>Selecciona un modo para comenzar.</p>`;
+        content.innerHTML = `<p>${i18n.t('Selecciona un modo para comenzar.')}</p>`;
     }
 }
 
@@ -1858,12 +1861,12 @@ function buildIonicCrystalUI() {
 
     // Selector de vista: celda unidad 3D o capa 2D con experimentos
     let vCard = createDiv().class('card');
-    vCard.child(createDiv('Vista').class('atom-card-label'));
+    vCard.child(createDiv(i18n.t('Vista')).class('atom-card-label'));
     let vBody = createDiv().class('card-body-static');
     let vRow  = createDiv();
     vRow.style('display', 'flex').style('gap', '6px');
     for (const [id, lbl] of [['3d', '🧊 Celda 3D'], ['2d', '▦ Capa 2D']]) {
-        let b = createButton(lbl);
+        let b = createButton(i18n.t(lbl));
         if (ionicView === id) b.class('btn-primary');
         b.style('flex', '1');
         b.mousePressed(() => setIonicView(id));
@@ -1888,32 +1891,32 @@ function buildIonicCrystalInfoCard() {
     const qStr = q => (q > 0 ? '+' : '−') + Math.abs(q);
 
     // "2 Na⁺ por cada S²⁻", "1 Ca²⁺ por cada 2 F⁻"
-    const ratio = `${s.ratio.cat} ${cat} por cada ${s.ratio.an > 1 ? s.ratio.an + ' ' : ''}${an}`;
+    const ratio = i18n.t('{a} por cada {b}', { a: `${s.ratio.cat} ${cat}`, b: `${s.ratio.an > 1 ? s.ratio.an + ' ' : ''}${an}` });
     const balance = `${s.ratio.cat}·(${qStr(s.cat.charge)}) + ${s.ratio.an}·(${qStr(s.an.charge)}) = 0`;
 
     let viewText;
     if (ionicView === '2d') {
-        viewText = 'Vista de una <b>capa</b> de la red: conserva la proporción de iones del cristal.' +
-                   (s.layerNote ? ' ' + s.layerNote : '');
+        viewText = i18n.t('Vista de una <b>capa</b> de la red: conserva la proporción de iones del cristal.') +
+                   (s.layerNote ? ' ' + i18n.t(s.layerNote) : '');
     } else if (s.id === 'cdcl2') {
-        viewText = `Se muestran dos <b>láminas</b> ${s.an.sym}–${s.cat.sym}–${s.an.sym}. Entre láminas las fuerzas son débiles, por eso el cristal se separa en escamas.`;
+        viewText = i18n.t('Se muestran dos <b>láminas</b> {lam}. Entre láminas las fuerzas son débiles, por eso el cristal se separa en escamas.', { lam: `${s.an.sym}–${s.cat.sym}–${s.an.sym}` });
     } else {
-        viewText = 'La <b>celda unidad</b> es la parte más pequeña de la red que, repetida en todas las direcciones, forma el cristal.';
+        viewText = i18n.t('La <b>celda unidad</b> es la parte más pequeña de la red que, repetida en todas las direcciones, forma el cristal.');
     }
 
     let card = createDiv().class('card');
-    card.child(createDiv('Red cristalina').class('atom-card-label'));
+    card.child(createDiv(i18n.t('Red cristalina')).class('atom-card-label'));
     let body = createDiv().class('card-body-static');
     body.html(`
         <div class="compound-formula">${getCompoundName()}</div>
-        <div class="result-detail">${s.name}</div>
-        <div class="result-detail" style="margin-bottom:8px">${s.lattice}</div>
+        <div class="result-detail">${i18n.t(s.name)}</div>
+        <div class="result-detail" style="margin-bottom:8px">${i18n.t(s.lattice)}</div>
         <div class="info-section">
-            <p><em>Proporción:</em> ${ratio}<br>
-               <span style="opacity:0.8">${balance} → cristal neutro</span></p>
-            <p><em>Entorno:</em> cada ${cat} está rodeado de ${s.cn.cat} ${an} y cada ${an} de ${s.cn.an} ${cat}.</p>
+            <p><em>${i18n.t('Proporción:')}</em> ${ratio}<br>
+               <span style="opacity:0.8">${balance} → ${i18n.t('cristal neutro')}</span></p>
+            <p><em>${i18n.t('Entorno:')}</em> ${i18n.t('cada {cat} está rodeado de {ncat} {an} y cada {an} de {nan} {cat}.', { cat, an, ncat: s.cn.cat, nan: s.cn.an })}</p>
             <p>${viewText}</p>
-            ${s.note ? `<p class="crystal-note">⚠ ${s.note}</p>` : ''}
+            ${s.note ? `<p class="crystal-note">⚠ ${i18n.t(s.note)}</p>` : ''}
         </div>
     `);
     card.child(body);
@@ -1936,12 +1939,12 @@ function setIonicView(view) {
 function buildIonicCrystal3DControls() {
     let fCard = createDiv().class('card');
     let fBody = createDiv().class('card-body-static');
-    fCard.child(createDiv('Visualización').class('atom-card-label'));
+    fCard.child(createDiv(i18n.t('Visualización')).class('atom-card-label'));
     fCard.child(fBody);
 
     createAutoRotateCheckbox(fBody);
 
-    let hint = createDiv('Los experimentos de voltaje y cizalladura están en la vista <b>Capa 2D</b>.');
+    let hint = createDiv(i18n.t('Los experimentos de voltaje y cizalladura están en la vista <b>Capa 2D</b>.'));
     hint.style('font-size', '10.5px').style('color', 'var(--text-muted)').style('margin-top', '6px');
     fBody.child(hint);
 
@@ -1951,22 +1954,22 @@ function buildIonicCrystal3DControls() {
 function buildIonicCrystal2DControls() {
     // Experimentos
     let expCard = createDiv().class('card');
-    expCard.child(createDiv('Experimentos').class('atom-card-label'));
+    expCard.child(createDiv(i18n.t('Experimentos')).class('atom-card-label'));
     let expBody = createDiv().class('card-body-static');
 
-    elBtnIonicVoltage2 = createButton('⚡ Aplicar voltaje');
+    elBtnIonicVoltage2 = createButton(i18n.t('⚡ Aplicar voltaje'));
     elBtnIonicVoltage2.class('btn-primary');
     elBtnIonicVoltage2.style('width', '100%').style('margin-bottom', '5px');
     elBtnIonicVoltage2.mousePressed(() => {
         if (ionicCrystalPhase === 'voltage') {
             ionicCrystalPhase = 'normal';
             ionicVibTime = 0;
-            elBtnIonicVoltage2.html('⚡ Aplicar voltaje');
+            elBtnIonicVoltage2.html(i18n.t('⚡ Aplicar voltaje'));
         } else {
             ionicCrystalPhase = 'voltage';
             resetIonicShear();
             ionicCrystalPhase = 'voltage';
-            elBtnIonicVoltage2.html('■ Quitar voltaje');
+            elBtnIonicVoltage2.html(i18n.t('■ Quitar voltaje'));
         }
     });
     expBody.child(elBtnIonicVoltage2);
@@ -1975,7 +1978,7 @@ function buildIonicCrystal2DControls() {
     let shearRow = createDiv();
     shearRow.style('display', 'flex').style('justify-content', 'space-between')
             .style('align-items', 'center').style('margin-bottom', '4px');
-    let shearLblText = createDiv('Fuerza lateral aplicada');
+    let shearLblText = createDiv(i18n.t('Fuerza lateral aplicada'));
     shearLblText.style('font-size', '11px').style('color', 'var(--text-muted)');
     elSliderShearLabel = createDiv('0 %');
     elSliderShearLabel.style('font-size', '11px').style('color', 'var(--accent)')
@@ -1999,7 +2002,7 @@ function buildIonicCrystal2DControls() {
         if (v > 0 && ionicCrystalPhase !== 'shear') {
             ionicCrystalPhase = 'shear';
             ionicVibTime = 0;
-            elBtnIonicVoltage2.html('⚡ Aplicar voltaje');
+            elBtnIonicVoltage2.html(i18n.t('⚡ Aplicar voltaje'));
         }
         updateShearSliderLabel();
         if (!isLooping()) redraw();
@@ -2011,13 +2014,13 @@ function buildIonicCrystal2DControls() {
     scale.style('position', 'relative').style('height', '14px').style('font-size', '9.5px')
          .style('color', 'var(--text-muted)');
     const pct = (100 / SHEAR_SLIDER_MAX) * 100;
-    let tick = createDiv('▲ resistencia');
+    let tick = createDiv(i18n.t('▲ resistencia'));
     tick.style('position', 'absolute').style('left', `calc(${pct}% - 6px)`).style('white-space', 'nowrap')
         .style('color', '#F59E0B');
     scale.child(tick);
     expBody.child(scale);
 
-    let resetShear = createButton('↺ Recomponer el cristal');
+    let resetShear = createButton(i18n.t('↺ Recomponer el cristal'));
     resetShear.style('width', '100%').style('margin-top', '6px').style('font-size', '11px');
     resetShear.mousePressed(() => { resetIonicShear(); if (!isLooping()) redraw(); });
     expBody.child(resetShear);
@@ -2028,7 +2031,7 @@ function buildIonicCrystal2DControls() {
     // Checkboxes de visualización
     let fCard = createDiv().class('card');
     let fBody = createDiv().class('card-body-static');
-    fCard.child(createDiv('Visualización').class('atom-card-label'));
+    fCard.child(createDiv(i18n.t('Visualización')).class('atom-card-label'));
     fCard.child(fBody);
 
     // Checkbox — ver fuerza resultante macroscópica
@@ -2042,7 +2045,7 @@ function buildIonicCrystal2DControls() {
     sChk.style('width', '14px').style('height', '14px').style('cursor', 'pointer')
         .style('accent-color', 'var(--accent)');
     sChk.elt.checked = false;
-    let sLbl = createElement('label', 'Fuerzas entre los dos bloques');
+    let sLbl = createElement('label', i18n.t('Fuerzas entre los dos bloques'));
     sLbl.attribute('for', 'chk-shear-forces');
     sLbl.style('font-size', '11.5px').style('color', 'var(--text-label)')
         .style('cursor', 'pointer').style('user-select', 'none');
@@ -2060,7 +2063,7 @@ function buildIonicCrystal2DControls() {
     eChk.style('width', '14px').style('height', '14px').style('cursor', 'pointer')
         .style('accent-color', 'var(--accent)');
     eChk.elt.checked = false;
-    let eLbl = createElement('label', 'Ver electrones');
+    let eLbl = createElement('label', i18n.t('Ver electrones'));
     eLbl.attribute('for', 'chk-electrons');
     eLbl.style('font-size', '11.5px').style('color', 'var(--text-label)')
         .style('cursor', 'pointer').style('user-select', 'none');
@@ -2232,7 +2235,7 @@ function drawIonicVoltageOverlay() {
     fill('#475569');
     textAlign(CENTER, BOTTOM);
     textSize(11);
-    text('⊘  Los iones no se desplazan', width / 2, topY - 6);
+    text(i18n.t('⊘  Los iones no se desplazan'), width / 2, topY - 6);
 
     let msgY1 = min(botY + 22, height - 28);
     let msgY2 = min(botY + 40, height - 10);
@@ -2240,11 +2243,11 @@ function drawIonicVoltageOverlay() {
     textAlign(CENTER, CENTER);
     textSize(14);
     textStyle(BOLD);
-    text('No conduce en sólido — iones fijos en la red', width / 2, msgY1);
+    text(i18n.t('No conduce en sólido — iones fijos en la red'), width / 2, msgY1);
     textStyle(NORMAL);
     fill('#475569');
     textSize(11);
-    text('(conduciría fundido o en disolución acuosa)', width / 2, msgY2);
+    text(i18n.t('(conduciría fundido o en disolución acuosa)'), width / 2, msgY2);
 }
 
 // ─── Cizalladura: modelo físico (js/crystal-shear.js) ────────────────────────
@@ -2387,10 +2390,10 @@ function drawIonicShearOverlay() {
 
     // Mensaje según el régimen
     const msgs = {
-        elastic:  ['#F59E0B', 'Deformación elástica', 'Las atracciones entre iones resisten la fuerza; al soltar, la red recupera su forma'],
-        slip:     ['#EF4444', 'Las capas deslizan', 'Se acercan iones de igual carga: aparece una fuerte repulsión'],
-        fracture: ['#EF4444', '¡Fractura! — el cristal iónico es frágil', 'La repulsión entre iones de igual carga separa las capas'],
-        layers:   ['#38BDF8', 'Las láminas deslizan unas sobre otras', 'Entre láminas solo hay fuerzas débiles (van der Waals): el cristal se exfolia'],
+        elastic:  ['#F59E0B', i18n.t('Deformación elástica'), i18n.t('Las atracciones entre iones resisten la fuerza; al soltar, la red recupera su forma')],
+        slip:     ['#EF4444', i18n.t('Las capas deslizan'), i18n.t('Se acercan iones de igual carga: aparece una fuerte repulsión')],
+        fracture: ['#EF4444', i18n.t('¡Fractura! — el cristal iónico es frágil'), i18n.t('La repulsión entre iones de igual carga separa las capas')],
+        layers:   ['#38BDF8', i18n.t('Las láminas deslizan unas sobre otras'), i18n.t('Entre láminas solo hay fuerzas débiles (van der Waals): el cristal se exfolia')],
     };
     const msg = msgs[ionicShearRegime()];
     if (msg) {
@@ -2434,7 +2437,7 @@ function drawIonicCrystalButtons() {
     textAlign(CENTER, CENTER);
     textSize(12);
     textStyle(BOLD);
-    text('← Volver al enlace', bx + btnW / 2, by + btnH / 2);
+    text(i18n.t('← Volver al enlace'), bx + btnW / 2, by + btnH / 2);
 
     // ── Pause/resume button ──
     noStroke();
@@ -2452,7 +2455,7 @@ function drawIonicCrystalButtons() {
     textAlign(CENTER, CENTER);
     textSize(12);
     textStyle(BOLD);
-    text(isPaused ? '▶ Reanudar' : '⏸ Pausar', paX + btnW / 2, by + btnH / 2);
+    text(isPaused ? i18n.t('▶ Reanudar') : i18n.t('⏸ Pausar'), paX + btnW / 2, by + btnH / 2);
     textStyle(NORMAL);
 
     _crystalBackBtnBounds  = { x: bx,  y: by, w: btnW, h: btnH };
@@ -2522,7 +2525,7 @@ function drawIonicShearLineForces() {
         pop();
         noStroke(); fill(148, 163, 184, alpha * 0.85);
         textAlign(LEFT, CENTER); textSize(9);
-        text(it.lbl, lX + 24, y);
+        text(i18n.t(it.lbl), lX + 24, y);
     }
 }
 
@@ -2595,14 +2598,14 @@ function buildMetallicUI() {
 
     // Reiniciar
     let resetRow = createDiv().class('reset-row');
-    let resetBtn = createButton('↺ Reiniciar simulación');
+    let resetBtn = createButton(i18n.t('↺ Reiniciar simulación'));
     resetBtn.mousePressed(() => {
         if (metallicMetalSel) metallicMetal = metallicMetalSel.value();
         metallicPhase = 'normal';
         deformOffset  = 0; deformTarget = 0; deformDone = false;
         initMetallicSimulation();
-        if (elBtnVoltage) elBtnVoltage.html('⚡ Aplicar voltaje');
-        if (elBtnDeform)  elBtnDeform.html('↔ Deformar red');
+        if (elBtnVoltage) elBtnVoltage.html(i18n.t('⚡ Aplicar voltaje'));
+        if (elBtnDeform)  elBtnDeform.html(i18n.t('↔ Deformar red'));
         refreshMetallicInfo();
     });
     resetRow.child(resetBtn);
@@ -2610,12 +2613,12 @@ function buildMetallicUI() {
 
     // Selector de metal
     let selCard  = createDiv().class('card');
-    selCard.child(createDiv('Metal').class('atom-card-label'));
+    selCard.child(createDiv(i18n.t('Metal')).class('atom-card-label'));
     let selBody  = createDiv().class('card-body-static');
     metallicMetalSel = createSelect();
     for (let sym in METALLIC_METALS) {
         let m = METALLIC_METALS[sym];
-        metallicMetalSel.option(`${sym} — ${m.name}  (${m.valence} e⁻ val.)`, sym);
+        metallicMetalSel.option(`${sym} — ${i18n.t(m.name)}  (${m.valence} ${i18n.t('e⁻ val.')})`, sym);
     }
     metallicMetalSel.value(metallicMetal);
     metallicMetalSel.changed(() => {
@@ -2623,8 +2626,8 @@ function buildMetallicUI() {
         metallicPhase = 'normal';
         deformOffset  = 0; deformTarget = 0; deformDone = false;
         initMetallicSimulation();
-        if (elBtnVoltage) elBtnVoltage.html('⚡ Aplicar voltaje');
-        if (elBtnDeform)  elBtnDeform.html('↔ Deformar red');
+        if (elBtnVoltage) elBtnVoltage.html(i18n.t('⚡ Aplicar voltaje'));
+        if (elBtnDeform)  elBtnDeform.html(i18n.t('↔ Deformar red'));
         refreshMetallicInfo();
     });
     selBody.child(metallicMetalSel);
@@ -2633,7 +2636,7 @@ function buildMetallicUI() {
 
     // Estado del enlace
     let infoCard = createDiv().class('card');
-    infoCard.child(createDiv('Estado del enlace').class('atom-card-label'));
+    infoCard.child(createDiv(i18n.t('Estado del enlace')).class('atom-card-label'));
     let infoBody = createDiv().class('card-body-static');
     elMetallicInfo = createDiv().class('info-section');
     infoBody.child(elMetallicInfo);
@@ -2642,10 +2645,10 @@ function buildMetallicUI() {
 
     // Experimentos
     let actCard = createDiv().class('card');
-    actCard.child(createDiv('Experimentos').class('atom-card-label'));
+    actCard.child(createDiv(i18n.t('Experimentos')).class('atom-card-label'));
     let actBody = createDiv().class('card-body-static');
 
-    elBtnVoltage = createButton('⚡ Aplicar voltaje');
+    elBtnVoltage = createButton(i18n.t('⚡ Aplicar voltaje'));
     elBtnVoltage.class('btn-primary');
     elBtnVoltage.style('width', '100%').style('margin-bottom', '5px');
     elBtnVoltage.mousePressed(() => {
@@ -2655,33 +2658,33 @@ function buildMetallicUI() {
                 let spd = random(0.8, 1.8), ang = random(TWO_PI);
                 e.vx = cos(ang) * spd; e.vy = sin(ang) * spd;
             }
-            elBtnVoltage.html('⚡ Aplicar voltaje');
+            elBtnVoltage.html(i18n.t('⚡ Aplicar voltaje'));
         } else {
             metallicPhase = 'voltage';
             deformOffset  = 0; deformTarget = 0; deformDone = false;
             for (let e of freeElectrons) {
                 e.vx = random(0.8, 2.2); e.vy = random(-0.5, 0.5);
             }
-            elBtnVoltage.html('■ Quitar voltaje');
-            if (elBtnDeform) elBtnDeform.html('↔ Deformar red');
+            elBtnVoltage.html(i18n.t('■ Quitar voltaje'));
+            if (elBtnDeform) elBtnDeform.html(i18n.t('↔ Deformar red'));
         }
         refreshMetallicInfo();
     });
     actBody.child(elBtnVoltage);
 
-    elBtnDeform = createButton('↔ Deformar red');
+    elBtnDeform = createButton(i18n.t('↔ Deformar red'));
     elBtnDeform.style('width', '100%');
     elBtnDeform.mousePressed(() => {
         if (metallicPhase === 'deform') {
             metallicPhase = 'normal';
             deformOffset  = 0; deformTarget = 0; deformDone = false;
-            elBtnDeform.html('↔ Deformar red');
+            elBtnDeform.html(i18n.t('↔ Deformar red'));
         } else {
             metallicPhase = 'deform';
             deformTarget  = latticeSpacing;   // un periodo: los iones vuelven a posiciones de red
             deformDone    = false;
-            elBtnVoltage.html('⚡ Aplicar voltaje');
-            elBtnDeform.html('↺ Restaurar red');
+            elBtnVoltage.html(i18n.t('⚡ Aplicar voltaje'));
+            elBtnDeform.html(i18n.t('↺ Restaurar red'));
         }
         refreshMetallicInfo();
     });
@@ -2698,15 +2701,15 @@ function refreshMetallicInfo() {
     const metal    = METALLIC_METALS[metallicMetal];
     const numE     = LATTICE_COLS * LATTICE_ROWS * metal.valence;
     const phaseMap = {
-        normal:  `<span style="color:#10B981">Normal (equilibrio)</span>`,
-        voltage: `<span style="color:#FBBF24">⚡ Voltaje aplicado</span>`,
-        deform:  `<span style="color:#F59E0B">↔ Deformando red</span>`,
+        normal:  `<span style="color:#10B981">${i18n.t('Normal (equilibrio)')}</span>`,
+        voltage: `<span style="color:#FBBF24">${i18n.t('⚡ Voltaje aplicado')}</span>`,
+        deform:  `<span style="color:#F59E0B">${i18n.t('↔ Deformando red')}</span>`,
     };
     elMetallicInfo.html(`
-        <p>Metal: <b><em style="color:${metal.color}">${metallicMetal}</em> — ${metal.name}</b></p>
-        <p>Valencia: <b>${metal.valence} e⁻</b> por átomo · Catión <b>${metallicMetal}<sup>${metal.charge}+</sup></b></p>
-        <p>e⁻ en el mar: <b>${numE}</b> · T. fusión: <b>${metal.mp} °C</b></p>
-        <p>Estado: ${phaseMap[metallicPhase] || '—'}</p>
+        <p>${i18n.t('Metal:')} <b><em style="color:${metal.color}">${metallicMetal}</em> — ${i18n.t(metal.name)}</b></p>
+        <p>${i18n.t('Valencia: <b>{n} e⁻</b> por átomo · Catión <b>{ion}</b>', { n: metal.valence, ion: `${metallicMetal}<sup>${metal.charge}+</sup>` })}</p>
+        <p>${i18n.t('e⁻ en el mar:')} <b>${numE}</b> · ${i18n.t('T. fusión:')} <b>${metal.mp} °C</b></p>
+        <p>${i18n.t('Estado:')} ${phaseMap[metallicPhase] || '—'}</p>
     `);
 }
 
@@ -2899,7 +2902,7 @@ function drawVoltageOverlay() {
     textSize(11);
     text('e⁻  →', width / 2, topY - 6);
     fill('#FBBF24');
-    text('←  I  (corriente convencional)', width / 2, topY - 20);
+    text(i18n.t('←  I  (corriente convencional)'), width / 2, topY - 20);
 
     // Mensaje inferior
     noStroke();
@@ -2907,7 +2910,7 @@ function drawVoltageOverlay() {
     textAlign(CENTER, CENTER);
     textSize(14);
     textStyle(BOLD);
-    text('⚡ Conductividad eléctrica', width / 2, min(botY + 22, height - 14));
+    text(i18n.t('⚡ Conductividad eléctrica'), width / 2, min(botY + 22, height - 14));
     textStyle(NORMAL);
 }
 
@@ -2933,7 +2936,7 @@ function drawDeformOverlay() {
     fill('#F59E0B');
     textAlign(RIGHT, CENTER);
     textSize(11);
-    text('Fuerza', arrowStart - 4, shearY - latticeSpacing * 0.5);
+    text(i18n.t('Fuerza'), arrowStart - 4, shearY - latticeSpacing * 0.5);
 
     // Línea de plano de cizalladura
     let regX = latticeStartX - pad;
@@ -2951,7 +2954,7 @@ function drawDeformOverlay() {
         textAlign(CENTER, CENTER);
         textSize(14);
         textStyle(BOLD);
-        text('El enlace no se rompe — maleabilidad', width / 2, min(botY + 22, height - 14));
+        text(i18n.t('El enlace no se rompe — maleabilidad'), width / 2, min(botY + 22, height - 14));
         textStyle(NORMAL);
     }
 }
