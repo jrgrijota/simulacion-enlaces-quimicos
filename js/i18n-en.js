@@ -259,4 +259,6 @@ window.I18N_EN = {
         'The molecules are neutral and their electrons are in the bonds: there are no free charges',
     'Todos los electrones de valencia están fijos en los enlaces covalentes: no hay cargas libres':
         'All the valence electrons are fixed in the covalent bonds: there are no free charges',
+  // Sello de la zona de simulación (js/sello.js)
+  'Más simulaciones en simulaciencia.es': 'More simulations at simulaciencia.es'
 };
