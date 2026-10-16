@@ -259,6 +259,8 @@ window.I18N_CA = {
         'Les molècules són neutres i els seus electrons són als enllaços: no hi ha càrregues lliures',
     'Todos los electrones de valencia están fijos en los enlaces covalentes: no hay cargas libres':
         'Tots els electrons de valència estan fixos als enllaços covalents: no hi ha càrregues lliures',
+  // Nombres de controles para lectores de pantalla
+  'Tipo de enlace': 'Tipus d\'enllaç',
   // Sello de la zona de simulación (js/sello.js)
   'Más simulaciones en simulaciencia.es': 'Més simulacions a simulaciencia.es'
 };

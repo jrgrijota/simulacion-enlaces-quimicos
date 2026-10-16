@@ -78,7 +78,7 @@ function buildCovalentCrystalUI() {
         let b = createButton(i18n.t(lbl));
         if (id === covCrystalId) b.class('btn-primary');
         b.style('font-size', '11.5px');
-        b.mousePressed(() => { if (id !== covCrystalId) selectCovalentCrystal(id); });
+        b.mouseClicked(() => { if (id !== covCrystalId) selectCovalentCrystal(id); });
         grid.child(b);
     }
     sBody.child(grid);
@@ -255,7 +255,7 @@ function buildCovalentExperimentsCard() {
     elBtnCovVoltage = createButton(covVoltage ? i18n.t('■ Quitar voltaje') : i18n.t('⚡ Aplicar voltaje'));
     elBtnCovVoltage.class('btn-primary');
     elBtnCovVoltage.style('width', '100%').style('margin-bottom', '8px');
-    elBtnCovVoltage.mousePressed(() => setCovalentVoltage(!covVoltage));
+    elBtnCovVoltage.mouseClicked(() => setCovalentVoltage(!covVoltage));
     body.child(elBtnCovVoltage);
 
     let row = createDiv();
@@ -298,7 +298,7 @@ function buildCovalentExperimentsCard() {
 
     let reset = createButton(i18n.t('↺ Volver a {T}', { T: fmtT(covInitialTemp(d)) }));
     reset.style('width', '100%').style('margin-top', '6px').style('font-size', '11px');
-    reset.mousePressed(() => setCovalentTemp(covInitialTemp(d)));
+    reset.mouseClicked(() => setCovalentTemp(covInitialTemp(d)));
     body.child(reset);
 
     card.child(body);
