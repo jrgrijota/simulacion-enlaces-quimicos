@@ -416,7 +416,7 @@ function buildIonicUI() {
     // ── Sidebar: botón de reinicio ──
     let resetRow = createDiv().class('reset-row');
     let resetBtn = createButton(i18n.t('↺ Reiniciar simulación'));
-    resetBtn.mousePressed(resetSimulation);
+    resetBtn.mouseClicked(resetSimulation);
     resetRow.child(resetBtn);
     uiContainer.child(resetRow);
 
@@ -438,6 +438,7 @@ function buildIonicUI() {
         ctrl.child(createDiv(labels[i]).class('atom-ctrl-label'));
 
         let sel = createSelect();
+        sel.attribute('aria-label', labels[i]);
         sel.option(i18n.t('— Vacío —'), 'NONE');
         for (let sym in ELEMENTS) {
             if (sym === 'NONE') continue;
@@ -465,18 +466,18 @@ function buildIonicUI() {
         let btnBox = createDiv().class('btn-group');
         if (i === 0) {
             let b = createButton(i18n.t('Cede un electrón a B')).id('btn-0r');
-            b.mousePressed(() => transferElectron(0, 1));
+            b.mouseClicked(() => transferElectron(0, 1));
             btnBox.child(b);
         } else if (i === 1) {
             let bL = createButton(i18n.t('Cede un electrón a A')).id('btn-1l');
-            bL.mousePressed(() => transferElectron(1, 0));
+            bL.mouseClicked(() => transferElectron(1, 0));
             let bR = createButton(i18n.t('Cede un electrón a C')).id('btn-1r');
-            bR.mousePressed(() => transferElectron(1, 2));
+            bR.mouseClicked(() => transferElectron(1, 2));
             btnBox.child(bL);
             btnBox.child(bR);
         } else {
             let b = createButton(i18n.t('Cede un electrón a B')).id('btn-2l');
-            b.mousePressed(() => transferElectron(2, 1));
+            b.mouseClicked(() => transferElectron(2, 1));
             btnBox.child(b);
         }
         ctrl.child(btnBox);
@@ -496,7 +497,7 @@ function buildCovalentUI() {
     // Sidebar: reset
     let resetRow = createDiv().class('reset-row');
     let resetBtn = createButton(i18n.t('↺ Reiniciar simulación'));
-    resetBtn.mousePressed(resetCovalentSimulation);
+    resetBtn.mouseClicked(resetCovalentSimulation);
     resetRow.child(resetBtn);
     uiContainer.child(resetRow);
 
@@ -515,7 +516,7 @@ function buildCovalentUI() {
     let cBtn = createButton(i18n.t('🔷 Ver cristales covalentes'));
     cBtn.class('btn-primary');
     cBtn.style('width', '100%');
-    cBtn.mousePressed(enterCovalentCrystal);
+    cBtn.mouseClicked(enterCovalentCrystal);
     cBody.child(cBtn);
     let cHint = createDiv(i18n.t('Diamante, grafito, sílice y hielo seco'));
     cHint.style('font-size', '10.5px').style('color', 'var(--text-muted)')
@@ -531,6 +532,7 @@ function buildCovalentUI() {
         ctrl.child(createDiv(labels[i]).class('atom-ctrl-label'));
 
         let sel = createSelect();
+        sel.attribute('aria-label', labels[i]);
         sel.option(i18n.t('— Vacío —'), 'NONE');
         for (let sym in ELEMENTS) {
             if (sym === 'NONE') continue;
@@ -562,19 +564,19 @@ function buildCovalentUI() {
     btn01.elt.innerHTML = '<span style="font-size:13px">⇄</span><br>' + i18n.t('Compartir');
     btn01.id('btn-cov-01');
     btn01.class('bond-connector-btn');
-    btn01.mousePressed(() => shareElectron(0, 1));
+    btn01.mouseClicked(() => shareElectron(0, 1));
     conn01.child(btn01);
     let dat01 = createButton('');
     dat01.elt.innerHTML = '<span style="font-size:13px">→</span><br>' + i18n.t('Dativo');
     dat01.id('btn-dat-01');
     dat01.class('bond-connector-btn bond-dative-btn');
-    dat01.mousePressed(() => shareElectronDative(0, 1));
+    dat01.mouseClicked(() => shareElectronDative(0, 1));
     conn01.child(dat01);
     let rec01 = createButton('');
     rec01.elt.innerHTML = '<span style="font-size:11px">↩</span><br>' + i18n.t('Recuperar');
     rec01.id('btn-rec-01');
     rec01.class('bond-connector-btn bond-recover-btn');
-    rec01.mousePressed(() => unshareElectron(0, 1));
+    rec01.mouseClicked(() => unshareElectron(0, 1));
     conn01.child(rec01);
 
     let conn12 = select('#bond-12');
@@ -583,19 +585,19 @@ function buildCovalentUI() {
     btn12.elt.innerHTML = '<span style="font-size:13px">⇄</span><br>' + i18n.t('Compartir');
     btn12.id('btn-cov-12');
     btn12.class('bond-connector-btn');
-    btn12.mousePressed(() => shareElectron(1, 2));
+    btn12.mouseClicked(() => shareElectron(1, 2));
     conn12.child(btn12);
     let dat12 = createButton('');
     dat12.elt.innerHTML = '<span style="font-size:13px">→</span><br>' + i18n.t('Dativo');
     dat12.id('btn-dat-12');
     dat12.class('bond-connector-btn bond-dative-btn');
-    dat12.mousePressed(() => shareElectronDative(1, 2));
+    dat12.mouseClicked(() => shareElectronDative(1, 2));
     conn12.child(dat12);
     let rec12 = createButton('');
     rec12.elt.innerHTML = '<span style="font-size:11px">↩</span><br>' + i18n.t('Recuperar');
     rec12.id('btn-rec-12');
     rec12.class('bond-connector-btn bond-recover-btn');
-    rec12.mousePressed(() => unshareElectron(1, 2));
+    rec12.mouseClicked(() => unshareElectron(1, 2));
     conn12.child(rec12);
 
     updateUIState();
@@ -1869,7 +1871,7 @@ function buildIonicCrystalUI() {
         let b = createButton(i18n.t(lbl));
         if (ionicView === id) b.class('btn-primary');
         b.style('flex', '1');
-        b.mousePressed(() => setIonicView(id));
+        b.mouseClicked(() => setIonicView(id));
         vRow.child(b);
     }
     vBody.child(vRow);
@@ -1960,7 +1962,7 @@ function buildIonicCrystal2DControls() {
     elBtnIonicVoltage2 = createButton(i18n.t('⚡ Aplicar voltaje'));
     elBtnIonicVoltage2.class('btn-primary');
     elBtnIonicVoltage2.style('width', '100%').style('margin-bottom', '5px');
-    elBtnIonicVoltage2.mousePressed(() => {
+    elBtnIonicVoltage2.mouseClicked(() => {
         if (ionicCrystalPhase === 'voltage') {
             ionicCrystalPhase = 'normal';
             ionicVibTime = 0;
@@ -2022,7 +2024,7 @@ function buildIonicCrystal2DControls() {
 
     let resetShear = createButton(i18n.t('↺ Recomponer el cristal'));
     resetShear.style('width', '100%').style('margin-top', '6px').style('font-size', '11px');
-    resetShear.mousePressed(() => { resetIonicShear(); if (!isLooping()) redraw(); });
+    resetShear.mouseClicked(() => { resetIonicShear(); if (!isLooping()) redraw(); });
     expBody.child(resetShear);
 
     expCard.child(expBody);
@@ -2599,7 +2601,7 @@ function buildMetallicUI() {
     // Reiniciar
     let resetRow = createDiv().class('reset-row');
     let resetBtn = createButton(i18n.t('↺ Reiniciar simulación'));
-    resetBtn.mousePressed(() => {
+    resetBtn.mouseClicked(() => {
         if (metallicMetalSel) metallicMetal = metallicMetalSel.value();
         metallicPhase = 'normal';
         deformOffset  = 0; deformTarget = 0; deformDone = false;
@@ -2616,6 +2618,7 @@ function buildMetallicUI() {
     selCard.child(createDiv(i18n.t('Metal')).class('atom-card-label'));
     let selBody  = createDiv().class('card-body-static');
     metallicMetalSel = createSelect();
+    metallicMetalSel.attribute('aria-label', i18n.t('Metal'));
     for (let sym in METALLIC_METALS) {
         let m = METALLIC_METALS[sym];
         metallicMetalSel.option(`${sym} — ${i18n.t(m.name)}  (${m.valence} ${i18n.t('e⁻ val.')})`, sym);
@@ -2651,7 +2654,7 @@ function buildMetallicUI() {
     elBtnVoltage = createButton(i18n.t('⚡ Aplicar voltaje'));
     elBtnVoltage.class('btn-primary');
     elBtnVoltage.style('width', '100%').style('margin-bottom', '5px');
-    elBtnVoltage.mousePressed(() => {
+    elBtnVoltage.mouseClicked(() => {
         if (metallicPhase === 'voltage') {
             metallicPhase = 'normal';
             for (let e of freeElectrons) {
@@ -2674,7 +2677,7 @@ function buildMetallicUI() {
 
     elBtnDeform = createButton(i18n.t('↔ Deformar red'));
     elBtnDeform.style('width', '100%');
-    elBtnDeform.mousePressed(() => {
+    elBtnDeform.mouseClicked(() => {
         if (metallicPhase === 'deform') {
             metallicPhase = 'normal';
             deformOffset  = 0; deformTarget = 0; deformDone = false;

@@ -259,6 +259,8 @@ window.I18N_EU = {
         'Molekulak neutroak dira eta haien elektroiak loturetan daude: ez dago karga askerik',
     'Todos los electrones de valencia están fijos en los enlaces covalentes: no hay cargas libres':
         'Balentzia-elektroi guztiak lotura kobalenteetan finko daude: ez dago karga askerik',
+  // Nombres de controles para lectores de pantalla
+  'Tipo de enlace': 'Lotura mota',
   // Sello de la zona de simulación (js/sello.js)
   'Más simulaciones en simulaciencia.es': 'Simulazio gehiago simulaciencia.es webgunean'
 };

@@ -9,7 +9,7 @@
     --text-main:           #eef2f8;
     --text-muted:          #9aa6bd;
     --text-label:          #cdd6e6;
-    --accent:              #3b82f6;
+    --accent:              #4a8bf7;
     --accent-strong:       #2563eb;
     --accent-soft:         rgba(59, 130, 246, 0.14);
     --success:             #10b981;
@@ -226,13 +226,14 @@ button:hover:not(:disabled) {
 }
 button:disabled { opacity: 0.28; cursor: not-allowed; }
 
+/* Fondo un tono más oscuro que el acento para que el texto blanco se lea bien (contraste 4,5:1) */
 .btn-primary {
-    background: var(--accent);
+    background: var(--accent-strong);
     color: #fff;
     border-color: var(--accent-strong);
 }
 .btn-primary:hover:not(:disabled) {
-    background: var(--accent-strong);
+    background: #1d4ed8;
     color: #fff;
     border-color: var(--accent-strong);
 }
