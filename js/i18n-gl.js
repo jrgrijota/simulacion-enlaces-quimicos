@@ -259,4 +259,6 @@ window.I18N_GL = {
         'As moléculas son neutras e os seus electróns están nos enlaces: non hai cargas libres',
     'Todos los electrones de valencia están fijos en los enlaces covalentes: no hay cargas libres':
         'Todos os electróns de valencia están fixos nos enlaces covalentes: non hai cargas libres',
+  // Sello de la zona de simulación (js/sello.js)
+  'Más simulaciones en simulaciencia.es': 'Máis simulacións en simulaciencia.es'
 };
