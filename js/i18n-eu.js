@@ -1,8 +1,7 @@
 // Interfazaren euskarazko itzulpenak (?lang=eu erabiltzean; ikusi js/i18n.js)
 window.I18N_EU = {
     // ── Página y barra lateral (index.html) ──
-    'Laboratorio de Enlaces Químicos': 'Lotura kimikoen laborategia',
-    'Laboratorio de Enlaces': 'Loturen laborategia',
+    'Enlaces Químicos': 'Lotura kimikoak',
     'Modelo de Bohr · Enlace Iónico': 'Bohrren eredua · Lotura ionikoa',
     'Enlace Iónico': 'Lotura ionikoa',
     'Enlace Covalente': 'Lotura kobalentea',
