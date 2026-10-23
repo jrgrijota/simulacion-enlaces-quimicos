@@ -1,8 +1,7 @@
 // Traducciones al inglés (británico) de la interfaz. Ver js/i18n.js.
 window.I18N_EN = {
     // ── Página y barra lateral (index.html) ──
-    'Laboratorio de Enlaces Químicos': 'Chemical Bonding Lab',
-    'Laboratorio de Enlaces': 'Bonding Lab',
+    'Enlaces Químicos': 'Chemical Bonding',
     'Modelo de Bohr · Enlace Iónico': 'Bohr model · Ionic bonding',
     'Enlace Iónico': 'Ionic Bonding',
     'Enlace Covalente': 'Covalent Bonding',

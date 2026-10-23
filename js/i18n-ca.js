@@ -1,8 +1,7 @@
 // Traducciones al catalán de la interfaz (se usan con ?lang=ca; ver js/i18n.js)
 window.I18N_CA = {
     // ── Página y barra lateral (index.html) ──
-    'Laboratorio de Enlaces Químicos': 'Laboratori d\'Enllaços Químics',
-    'Laboratorio de Enlaces': 'Laboratori d\'Enllaços',
+    'Enlaces Químicos': 'Enllaços Químics',
     'Modelo de Bohr · Enlace Iónico': 'Model de Bohr · Enllaç Iònic',
     'Enlace Iónico': 'Enllaç Iònic',
     'Enlace Covalente': 'Enllaç Covalent',
