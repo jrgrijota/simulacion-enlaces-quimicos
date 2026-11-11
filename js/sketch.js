@@ -164,6 +164,34 @@ function setup() {
     uiContainer = select('#ui-overlay');
     select('#mode-select').changed(handleModeChange);
     initSimulation();
+
+    // Simulación ya preparada desde la dirección (js/parametros.js),
+    // p. ej. ?modo=ionico&a=cl&b=mg&c=cl o ?modo=covalente&cristal=grafito
+    const opcion = (el, v) => {
+        if (!el) return;
+        if (v === 'vacio' || v === 'vacío' || v === 'ninguno') v = 'none';
+        const o = [...el.options].find(o => o.value.toLowerCase() === v);
+        if (!o) return;
+        el.value = o.value;
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    const atomo = (i) => (v) => opcion(document.querySelector(`#ctrl-${i} select`), v);
+    aplicarParametrosUrl({
+        modo:    (v) => opcion(document.getElementById('mode-select'),
+                     { ionico: 'ionic', 'iónico': 'ionic', covalente: 'covalent',
+                       metalico: 'metallic', 'metálico': 'metallic' }[v] || v),
+        a:       atomo(0),
+        b:       atomo(1),
+        c:       atomo(2),
+        metal:   (v) => { if (currentMode === 'METALLIC') opcion(document.querySelector('#ui-overlay select'), v); },
+        cristal: (v) => {
+            const id = { diamante: 'diamond', grafito: 'graphite', silice: 'silica', 'sílice': 'silica',
+                         'hielo-seco': 'dryice', hieloseco: 'dryice' }[v];
+            if (currentMode !== 'COVALENT' || !id) return;
+            covCrystalId = id;
+            enterCovalentCrystal();
+        },
+    });
 }
 
 function draw() {
